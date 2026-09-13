@@ -1,8 +1,8 @@
 :root {
-    --timeline-block-width: 100px;
-    --midi-cell-width: 200px; /* Base width for a single complete full beat */
+    --timeline-block-width: 200px; /* Base width for 1 full structural Bar on timeline */
+    --midi-cell-width: 200px;      /* Base width for 1 beat inside the MIDI roll */
     --midi-cell-height: 24px;
-    --midi-subdivisions: 4;   /* Calculated lines inside a beat */
+    --midi-subdivisions: 4;
 }
 
 * { box-sizing: border-box; }
@@ -27,7 +27,7 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
     background: #111; color: #ff9800; width: 60px; text-align: center; border: 1px solid #555; padding: 4px; font-weight: bold; border-radius: 4px;
 }
 
-/* Layout Framework Panels */
+/* Workspace Framework Setup Split panels */
 .workspace { display: flex; flex: 1; overflow: hidden; }
 .sidebar {
     width: 200px; background-color: #202026; border-right: 2px solid #111; padding: 15px; display: flex; flex-direction: column; gap: 10px;
@@ -44,26 +44,51 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 
 /* Track Rows Layout Grid Canvas */
 .tracks-list { width: max-content; min-width: 100%; }
-.track-row { display: flex; height: 50px; border-bottom: 1px solid #222; width: max-content; min-width: 100%; }
+.track-row { display: flex; height: 60px; border-bottom: 1px solid #222; width: max-content; min-width: 100%; }
 .track-header { width: 200px; min-width: 200px; max-width: 200px; background: #26262d; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; border-right: 1px solid #333; position: sticky; left: 0; z-index: 11; }
 .track-title { font-size: 0.85rem; font-weight: bold; }
 .track-controls { display: flex; gap: 4px; }
 .track-controls button { padding: 2px 6px; font-size: 0.7rem; }
 
-/* Infinite Timeline Canvas Background */
+/* Timeline Canvas Grid background setup */
 .track-timeline { 
     display: flex; 
     flex: 1; 
     position: relative;
-    background-image: linear-gradient(to right, #333 1px, transparent 1px);
-    background-size: var(--timeline-block-width) 100%;
+    background-image: linear-gradient(to right, #2d2d35 1px, transparent 1px);
+    background-size: calc(var(--timeline-block-width) / 4) 100%; /* Shows beat increments implicitly */
+    min-width: 5000px;
+    background-color: #141417;
 }
-.timeline-block { position: absolute; height: 100%; width: 100%; top: 0; left: 0; pointer-events: none; }
-.timeline-block.has-notes { background-color: rgba(76, 175, 80, 0.15); }
 
-/* Playhead Tracker Indicator Pin */
+/* Playhead Tracker line */
 #playhead-line {
     position: absolute; top: 0; bottom: 0; width: 2px; background: #ffeb3b; z-index: 100; pointer-events: none; left: 0; display: none;
+}
+
+/* --- FL Studio Timeline Clips / Blocks --- */
+.timeline-clip {
+    position: absolute;
+    top: 4px;
+    height: 50px;
+    background: #2e3d52;
+    border: 1px solid #4a6585;
+    border-radius: 4px;
+    cursor: move;
+    z-index: 5;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.timeline-clip.selected { border-color: #ff9800; box-shadow: 0 0 5px rgba(255, 152, 0, 0.4); }
+.clip-title { font-size: 0.65rem; color: #aaa; background: rgba(0,0,0,0.3); padding: 1px 4px; font-weight: bold; }
+
+/* Canvas note preview matrix renderer window */
+.clip-preview-canvas {
+    flex: 1;
+    width: 100%;
+    pointer-events: none; /* Mouse clicks bypass canvas layer directly into move handler */
+    background: rgba(0,0,0,0.15);
 }
 
 /* --- MIDI Piano Roll Canvas Panel --- */
@@ -83,29 +108,16 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 .white-key { background: #e0e0e0; color: #000; }
 .black-key { background: #333; color: #fff; border-left: 8px solid #ff9800; }
 
-/* FIX: Infinite Canvas using procedural background generation loops */
-.piano-grid { 
-    display: flex; 
-    flex-direction: column; 
-    position: relative; 
-    flex: 1;
-    min-width: 5000px; /* Generates 5,000 pixels of horizontal scrolling sheet workspace space */
-}
+.piano-grid { display: flex; flex-direction: column; position: relative; flex: 1; min-width: 2000px; }
 
 /* Dynamic Grid Row Sheets */
 .grid-row { 
-    display: flex; 
-    height: var(--midi-cell-height); min-height: var(--midi-cell-height); max-height: var(--midi-cell-height);
-    position: relative;
-    /* Sub-division tick marks mapping layers style */
+    display: flex; height: var(--midi-cell-height); min-height: var(--midi-cell-height); max-height: var(--midi-cell-height); position: relative;
     background-image: 
         linear-gradient(to right, rgba(29, 29, 36, 0.4) 1px, transparent 1px),
         linear-gradient(to right, #1d1d24 1px, transparent 1px);
-    background-size: 
-        calc(var(--midi-cell-width) / var(--midi-subdivisions)) 100%,
-        var(--midi-cell-width) 100%;
-    background-color: #18181c;
-    border-bottom: 1px solid #1d1d24;
+    background-size: calc(var(--midi-cell-width) / var(--midi-subdivisions)) 100%, var(--midi-cell-width) 100%;
+    background-color: #18181c; border-bottom: 1px solid #1d1d24;
 }
 .grid-row:nth-child(even) { background-color: #151518; }
 

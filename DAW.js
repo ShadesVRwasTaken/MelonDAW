@@ -1,6 +1,6 @@
-// ==========================================================================
-// PART 1: AUDIO CONFIGURATION & INFINITE TRANSPORT TIMING
-// ==========================================================================
+// ==========================================
+// WINDOW 1: CORE ARCHITECTURE & TIMING ENGINES
+// ==========================================
 
 let audioCtx = null;
 let trackCount = 0;
@@ -8,15 +8,14 @@ let isPlaying = false;
 let currentSeconds = 0; 
 let bpm = 120;
 let playbackInterval = null;
-let activeTrackId = null;
 
-// Adaptive Snapping Value Context Sizing Trackers
-let currentSnapValue = 0.25; // 0.25 = quarter note (Default 1 beat unit snapping interval)
+// Track Database Mapping Structure
+const trackClips = {}; // Format: { trackId: [ { id: "clip-1", barStart: 0, notes: [] } ] }
+let activeClipRef = null; // Pointer register holds clip entity focus
+let currentSnapValue = 0.25;
 
-const trackNotes = {}; 
 const NOTE_NAMES = ['B', 'A#', 'A', 'G#', 'G', 'F#', 'F', 'E', 'D#', 'D', 'C#', 'C'];
 const ALL_NOTES = [];
-
 for (let octave = 8; octave >= 0; octave--) {
     NOTE_NAMES.forEach(note => { ALL_NOTES.push(`${note}${octave}`); });
 }
@@ -48,337 +47,329 @@ function playTone(freq, duration) {
     osc.stop(audioCtx.currentTime + duration);
 }
 
-// Infinite Continuous Time tracking loop driver engine
 function startTimelineLoop() {
-    const timeResolutionMs = 25; // Processes layout positions accurately every 25 milliseconds
+    const timeResolutionMs = 25; 
     const startTime = Date.now() - (currentSeconds * 1000);
 
     playbackInterval = setInterval(() => {
         const elapsedSec = (Date.now() - startTime) / 1000;
         currentSeconds = elapsedSec;
-        
         const secondsPerBeat = 60 / bpm;
         const currentBeatPosition = elapsedSec / secondsPerBeat;
 
-        // Visual layout playhead tracking synchronization updating
-        const timelineZoomX = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--timeline-block-width')) || 100;
-        const playheadPx = currentBeatPosition * timelineZoomX;
+        // Render playhead coordinates tracking ticks
+        const timelineZoomX = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--timeline-block-width')) || 200;
+        const playheadPx = (currentBeatPosition / 4) * timelineZoomX; // 4 beats = 1 timeline block bar width
         
         const playheadLine = document.getElementById('playhead-line');
-        if (playheadLine) {
-            playheadLine.style.display = 'block';
-            playheadLine.style.left = `${playheadPx}px`;
-        }
+        if (playheadLine) { playheadLine.style.display = 'block'; playheadLine.style.left = `${playheadPx}px`; }
 
-        // Loop checks audio note trigger ranges
-        Object.keys(trackNotes).forEach(trackId => {
-            trackNotes[trackId].forEach(noteObj => {
+        // Dynamic multi-clip timeline scanning logic
+        Object.keys(trackClips).forEach(trackId => {
+            trackClips[trackId].forEach(clipObj => {
+                const clipBeatOffset = clipObj.barStart * 4; 
                 const triggerThreshold = timeResolutionMs / 1000 / secondsPerBeat;
-                if (currentBeatPosition >= noteObj.beatStart && currentBeatPosition < noteObj.beatStart + triggerThreshold) {
-                    if (!noteObj.hasTriggeredThisPass) {
-                        noteObj.hasTriggeredThisPass = true;
-                        const freq = getFrequency(noteObj.note);
-                        playTone(freq, noteObj.duration * secondsPerBeat);
+
+                clipObj.notes.forEach(noteObj => {
+                    const absoluteNoteBeatPosition = clipBeatOffset + noteObj.beatStart;
+                    if (currentBeatPosition >= absoluteNoteBeatPosition && currentBeatPosition < absoluteNoteBeatPosition + triggerThreshold) {
+                        if (!noteObj.hasTriggered) {
+                            noteObj.hasTriggered = true;
+                            const freq = getFrequency(noteObj.note);
+                            playTone(freq, noteObj.duration * secondsPerBeat);
+                        }
+                    } else {
+                        noteObj.hasTriggered = false;
                     }
-                } else {
-                    noteObj.hasTriggeredThisPass = false;
-                }
+                });
             });
         });
     }, timeResolutionMs);
 }
 
-// ==========================================================================
-// PART 2: TOOLBAR CONTROLS & DYNAMIC VIEWPORT GENERATION
-// ==========================================================================
+// ==========================================
+// WINDOW 2: TIMELINE ARRANGEMENT & DRAG ENGINE
+// ==========================================
 
 document.getElementById('play-btn').addEventListener('click', () => {
     initAudio();
-    if (!isPlaying) {
-        isPlaying = true;
-        document.getElementById('play-btn').innerText = "⏸ Pause";
-        document.getElementById('play-btn').classList.add('active');
-        startTimelineLoop();
-    } else {
-        clearInterval(playbackInterval);
-        isPlaying = false;
-        document.getElementById('play-btn').innerText = "▶ Play";
-        document.getElementById('play-btn').classList.remove('active');
-    }
+    if (!isPlaying) { isPlaying = true; startTimelineLoop(); document.getElementById('play-btn').innerText = "⏸ Pause"; } 
+    else { clearInterval(playbackInterval); isPlaying = false; document.getElementById('play-btn').innerText = "▶ Play"; }
 });
 
 document.getElementById('stop-btn').addEventListener('click', () => {
-    clearInterval(playbackInterval);
-    isPlaying = false;
-    currentSeconds = 0;
+    clearInterval(playbackInterval); isPlaying = false; currentSeconds = 0;
     document.getElementById('play-btn').innerText = "▶ Play";
-    document.getElementById('play-btn').classList.remove('active');
-    
-    const playheadLine = document.getElementById('playhead-line');
-    if (playheadLine) playheadLine.style.display = 'none';
-    
-    Object.keys(trackNotes).forEach(t => trackNotes[t].forEach(n => n.hasTriggeredThisPass = false));
+    if (document.getElementById('playhead-line')) document.getElementById('playhead-line').style.display = 'none';
+    Object.keys(trackClips).forEach(t => trackClips[t].forEach(c => c.notes.forEach(n => n.hasTriggered = false)));
 });
 
-document.getElementById('bpm-input').addEventListener('input', (e) => {
-    bpm = parseInt(e.target.value) || 120;
-});
+document.getElementById('bpm-input').addEventListener('input', (e) => { bpm = parseInt(e.target.value) || 120; });
 
-// Render infinite layout helper ticks into top ruler track panels
-function generateInfiniteTimelineRuler() {
+function generateTimelineRuler() {
     const ticksContainer = document.getElementById('ruler-ticks');
-    ticksContainer.innerHTML = '<div id="playhead-line"></div>'; // Re-insert playhead lane shell
-    
-    // Procedurally prints initial timeline markers up to 100 beats down the track
-    for (let i = 1; i <= 100; i++) {
-        const tick = document.createElement('div');
-        tick.className = 'tick';
-        tick.innerText = `Beat ${i}`;
+    ticksContainer.innerHTML = '<div id="playhead-line"></div>';
+    for (let i = 1; i <= 64; i++) {
+        const tick = document.createElement('div'); tick.className = 'tick'; tick.innerText = `Bar ${i}`;
         ticksContainer.appendChild(tick);
     }
 }
 
 document.getElementById('add-inst-btn').addEventListener('click', () => {
-    trackCount++;
-    const trackId = `track-${trackCount}`;
-    trackNotes[trackId] = [];
+    trackCount++; const trackId = `track-${trackCount}`; trackClips[trackId] = [];
     createTimelineRow(trackId, `Instrument ${trackCount}`, 'instrument');
-    openPianoRoll(trackId, `Instrument ${trackCount}`);
 });
-
 document.getElementById('add-audio-btn').addEventListener('click', () => {
-    trackCount++;
-    const trackId = `track-${trackCount}`;
-    trackNotes[trackId] = [];
+    trackCount++; const trackId = `track-${trackCount}`; trackClips[trackId] = [];
     createTimelineRow(trackId, `Audio Sample ${trackCount}`, 'audio');
 });
 
 function createTimelineRow(trackId, trackName, type) {
     const listContainer = document.getElementById('tracks-list');
-    const row = document.createElement('div');
-    row.className = `track-row ${type}-track`;
-    row.id = `row-${trackId}`;
+    const row = document.createElement('div'); row.className = `track-row ${type}-track`; row.id = `row-${trackId}`;
 
     row.innerHTML = `
         <div class="track-header">
             <span class="track-title">${trackName}</span>
-            <div class="track-controls">
-                ${type === 'instrument' ? `<button class="edit-midi-btn" onclick="openPianoRoll('${trackId}', '${trackName}')">🎹 Edit</button>` : ''}
-                <button class="delete-btn" onclick="deleteTrack('${trackId}')">🗑</button>
-            </div>
+            <div class="track-controls"><button onclick="deleteTrack('${trackId}')">🗑</button></div>
         </div>
-        <div class="track-timeline">
-             <div class="timeline-block" id="overview-${trackId}"></div>
-        </div>
+        <div class="track-timeline" data-trackid="${trackId}"></div>
     `;
+
+    // Double-click an empty row to paint an FL Studio style block bar clip
+    row.querySelector('.track-timeline').addEventListener('dblclick', function(e) {
+        if (e.target !== this) return; // Prevent double-clicks on clips inside
+        const timelineZoomX = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--timeline-block-width')) || 200;
+        const targetBar = Math.floor(e.offsetX / timelineZoomX);
+        createNewTimelineClip(trackId, targetBar, this);
+    });
+
     listContainer.appendChild(row);
 }
 
-// ==========================================================================
-// PART 3: PIANO ROLL CANVAS & ADAPTIVE SNAPPING GRID CALCULATIONS
-// ==========================================================================
+function createNewTimelineClip(trackId, barStart, timelineTrackEl) {
+    const clipId = `clip-${Date.now()}`;
+    const clipObj = { id: clipId, barStart: barStart, notes: [] };
+    trackClips[trackId].push(clipObj);
+
+    const clipEl = document.createElement('div');
+    clipEl.className = 'timeline-clip';
+    clipEl.id = clipId;
+    clipEl.innerHTML = `
+        <div class="clip-title">Pattern</div>
+        <canvas class="clip-preview-canvas"></canvas>
+    `;
+
+    updateClipVisualPlacement(clipEl, clipObj);
+    timelineTrackEl.appendChild(clipEl);
+    setupClipTimelineDrag(clipEl, clipObj, trackId);
+    
+    // Double click the bar pattern clip to dive down into midi piano roll view
+    clipEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        openPianoRoll(clipObj, trackId);
+    });
+}
+
+function updateClipVisualPlacement(clipEl, clipObj) {
+    const timelineZoomX = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--timeline-block-width')) || 200;
+    clipEl.style.width = `${timelineZoomX}px`; // Each clip defaults to exactly 1 complete Bar long
+    clipEl.style.left = `${clipObj.barStart * timelineZoomX}px`;
+    renderClipPreviewMatrix(clipEl, clipObj);
+}
+
+function setupClipTimelineDrag(clipEl, clipObj, trackId) {
+    let isDragging = false, startX, startLeft;
+    const timelineZoomX = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--timeline-block-width')) || 200;
+
+    clipEl.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); clipEl.setPointerCapture(e.pointerId);
+        isDragging = true; startX = e.clientX; startLeft = parseFloat(clipEl.style.left);
+        document.querySelectorAll('.timeline-clip').forEach(c => c.classList.remove('selected'));
+        clipEl.classList.add('selected');
+    });
+
+    clipEl.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        let newLeft = Math.max(0, startLeft + (e.clientX - startX));
+        clipEl.style.left = `${newLeft}px`;
+    });
+
+    clipEl.addEventListener('pointerup', (e) => {
+        if (!isDragging) return; isDragging = false; clipEl.releasePointerCapture(e.pointerId);
+        // Snaps structural position vector directly onto column bar ticks
+        clipObj.barStart = Math.round(parseFloat(clipEl.style.left) / timelineZoomX());
+        updateClipVisualPlacement(clipEl, clipObj);
+    });
+
+    clipEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); clipEl.remove();
+        trackClips[trackId] = trackClips[trackId].filter(c => c.id !== clipObj.id);
+        if (activeClipRef && activeClipRef.id === clipObj.id) document.getElementById('midi-editor').classList.add('hidden');
+    });
+}
+
+// ==========================================
+// WINDOW 3: NOTE CANVAS PREVIEW & PIANO ROLL
+// ==========================================
+
+function renderClipPreviewMatrix(clipEl, clipObj) {
+    const canvas = clipEl.querySelector('.clip-preview-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    // Resize drawing canvas resolution dynamically to match rendering boundaries
+    canvas.width = clipEl.clientWidth;
+    canvas.height = clipEl.clientHeight - 12;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (clipObj.notes.length === 0) return;
+
+    // Filter focus boundaries around active keys scale
+    const noteIndices = clipObj.notes.map(n => ALL_NOTES.indexOf(n.note));
+    const maxIdx = Math.max(...noteIndices), minIdx = Math.min(...noteIndices);
+    const idxRange = (maxIdx - minIdx) || 4;
+
+    ctx.fillStyle = '#ff9800';
+    clipObj.notes.forEach(note => {
+        const xStart = (note.beatStart / 4) * canvas.width;
+        const width = (note.duration / 4) * canvas.width;
+        
+        const currentIdx = ALL_NOTES.indexOf(note.note);
+        const yPercent = (currentIdx - minIdx) / idxRange;
+        const yStart = yPercent * (canvas.height - 6);
+
+        ctx.fillRect(xStart, yStart, Math.max(4, width), 4);
+    });
+}
 
 function calculateAdaptiveSnapping(zoomWidth) {
     const indicator = document.getElementById('snap-value');
-    
-    if (zoomWidth < 150) {
-        currentSnapValue = 1.0; // Snaps strictly to full beats
-        document.documentElement.style.setProperty('--midi-subdivisions', '1');
-        if (indicator) indicator.innerText = "1/4 Note (1 Beat)";
-    } else if (zoomWidth >= 150 && zoomWidth < 350) {
-        currentSnapValue = 0.5; // 8th note steps
-        document.documentElement.style.setProperty('--midi-subdivisions', '2');
-        if (indicator) indicator.innerText = "1/8 Note";
-    } else if (zoomWidth >= 350 && zoomWidth < 700) {
-        currentSnapValue = 0.25; // 16th note structures
-        document.documentElement.style.setProperty('--midi-subdivisions', '4');
-        if (indicator) indicator.innerText = "1/16 Note";
-    } else {
-        currentSnapValue = 0.125; // High definition 32nd note adjustments
-        document.documentElement.style.setProperty('--midi-subdivisions', '8');
-        if (indicator) indicator.innerText = "1/32 Note";
-    }
+    if (zoomWidth < 150) { currentSnapValue = 1.0; document.documentElement.style.setProperty('--midi-subdivisions', '1'); if (indicator) indicator.innerText = "1/4 Note (1 Beat)"; } 
+    else if (zoomWidth >= 150 && zoomWidth < 350) { currentSnapValue = 0.5; document.documentElement.style.setProperty('--midi-subdivisions', '2'); if (indicator) indicator.innerText = "1/8 Note"; } 
+    else if (zoomWidth >= 350 && zoomWidth < 700) { currentSnapValue = 0.25; document.documentElement.style.setProperty('--midi-subdivisions', '4'); if (indicator) indicator.innerText = "1/16 Note"; } 
+    else { currentSnapValue = 0.125; document.documentElement.style.setProperty('--midi-subdivisions', '8'); if (indicator) indicator.innerText = "1/32 Note"; }
 }
 
-function openPianoRoll(trackId, trackName) {
-    activeTrackId = trackId;
-    document.getElementById('current-editing-track').innerText = trackName;
+function openPianoRoll(clipObj, trackId) {
+    activeClipRef = clipObj;
+    document.getElementById('current-editing-track').innerText = `Pattern (Bar ${clipObj.barStart + 1})`;
     document.getElementById('midi-editor').classList.remove('hidden');
 
     const keysContainer = document.getElementById('piano-keys');
     const gridContainer = document.getElementById('piano-grid');
-    keysContainer.innerHTML = '';
-    gridContainer.innerHTML = '';
+    keysContainer.innerHTML = ''; gridContainer.innerHTML = '';
 
-    // Initialize adaptive layout scale calculations immediately
-    const baseWidthSlider = document.getElementById('midi-zoom-x').value;
-    calculateAdaptiveSnapping(parseFloat(baseWidthSlider));
+    calculateAdaptiveSnapping(parseFloat(document.getElementById('midi-zoom-x').value));
 
     ALL_NOTES.forEach(noteName => {
-        const key = document.createElement('div');
-        key.className = `piano-key ${noteName.includes('#') ? 'black-key' : 'white-key'}`;
+        const key = document.createElement('div'); key.className = `piano-key ${noteName.includes('#') ? 'black-key' : 'white-key'}`;
         key.innerText = noteName.endsWith('C') || noteName.includes('C') ? noteName : noteName.slice(0,2);
         key.dataset.note = noteName;
         key.addEventListener('click', () => { initAudio(); playTone(getFrequency(noteName), 0.2); });
         keysContainer.appendChild(key);
 
-        const rowGrid = document.createElement('div');
-        rowGrid.className = 'grid-row';
-        rowGrid.dataset.note = noteName;
-        
-        // Single canvas click tracking catches note drawing anywhere down the lane lines
+        const rowGrid = document.createElement('div'); rowGrid.className = 'grid-row'; rowGrid.dataset.note = noteName;
         rowGrid.addEventListener('dblclick', (e) => {
             e.stopPropagation();
-            const clickX = e.offsetX;
             const cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
-            const clickedBeatPosition = clickX / cellWidth;
+            const snappedBeat = Math.round((e.offsetX / cellWidth) / currentSnapValue) * currentSnapValue;
             
-            // Mathematical snap targeting calculation
-            const snappedBeat = Math.round(clickedBeatPosition / currentSnapValue) * currentSnapValue;
-            createNewNote(trackId, noteName, snappedBeat);
+            // Limit bounds inside exactly 1 pattern block sequence length boundary
+            if (snappedBeat >= 0 && snappedBeat < 4) { createNewNote(noteName, snappedBeat, clipObj, trackId); }
         });
         gridContainer.appendChild(rowGrid);
     });
 
-    trackNotes[trackId].forEach(noteObj => renderNoteElement(noteObj));
+    clipObj.notes.forEach(noteObj => renderNoteElement(noteObj, trackId));
     setTimeout(() => {
         const c4Key = document.querySelector('.piano-key[data-note="C4"]');
         if (c4Key) c4Key.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, 100);
 }
 
-function createNewNote(trackId, noteName, beatStart) {
+function createNewNote(noteName, beatStart, clipObj, trackId) {
     const noteId = `note-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const newNoteObj = { id: noteId, note: noteName, beatStart: beatStart, duration: currentSnapValue, hasTriggeredThisPass: false };
-    trackNotes[trackId].push(newNoteObj);
-    renderNoteElement(newNoteObj);
+    const newNoteObj = { id: noteId, note: noteName, beatStart: beatStart, duration: currentSnapValue, hasTriggered: false };
+    clipObj.notes.push(newNoteObj);
+    renderNoteElement(newNoteObj, trackId);
     playTone(getFrequency(noteName), 0.2);
-    updateTimelineOverview(trackId);
+    
+    // Updates parent pattern mini note canvas schematic previews dynamically
+    const clipEl = document.getElementById(clipObj.id);
+    if (clipEl) renderClipPreviewMatrix(clipEl, clipObj);
 }
 
-function renderNoteElement(noteObj) {
+function renderNoteElement(noteObj, trackId) {
     const gridContainer = document.getElementById('piano-grid');
-    const noteEl = document.createElement('div');
-    noteEl.className = 'piano-note';
-    noteEl.id = noteObj.id;
-    noteEl.innerHTML = `<div class="resize-handle"></div>`;
-
+    const noteEl = document.createElement('div'); noteEl.className = 'piano-note'; noteEl.id = noteObj.id; noteEl.innerHTML = `<div class="resize-handle"></div>`;
     updateNoteStylePosition(noteEl, noteObj);
     gridContainer.appendChild(noteEl);
-    setupNoteInteractions(noteEl, noteObj);
+    setupNoteInteractions(noteEl, noteObj, trackId);
 }
 
 function updateNoteStylePosition(noteEl, noteObj) {
     let cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
     let cellHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height')) || 24;
-    const noteIndex = ALL_NOTES.indexOf(noteObj.note);
-
-    noteEl.style.width = `${noteObj.duration * cellWidth}px`;
-    noteEl.style.height = `${cellHeight - 2}px`;
-    noteEl.style.left = `${noteObj.beatStart * cellWidth}px`;
-    noteEl.style.top = `${noteIndex * cellHeight + 1}px`;
+    noteEl.style.width = `${noteObj.duration * cellWidth}px`; noteEl.style.height = `${cellHeight - 2}px`;
+    noteEl.style.left = `${noteObj.beatStart * cellWidth}px`; noteEl.style.top = `${ALL_NOTES.indexOf(noteObj.note) * cellHeight + 1}px`;
 }
 
-function setupNoteInteractions(noteEl, noteObj) {
-    let isDragging = false, isResizing = false;
-    let startX, startY, startLeft, startTop, startWidth;
-
+function setupNoteInteractions(noteEl, noteObj, trackId) {
+    let isDragging = false, isResizing = false, startX, startY, startLeft, startTop, startWidth;
     const cellWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
     const cellHeight = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height')) || 24;
 
     noteEl.addEventListener('pointerdown', (e) => {
         initAudio(); e.stopPropagation(); noteEl.setPointerCapture(e.pointerId);
-        startX = e.clientX; startY = e.clientY;
-        startLeft = parseFloat(noteEl.style.left); startTop = parseFloat(noteEl.style.top); startWidth = parseFloat(noteEl.style.width);
-        if (e.target.classList.contains('resize-handle')) { isResizing = true; } 
-        else { isDragging = true; noteEl.classList.add('dragging'); }
+        startX = e.clientX; startY = e.clientY; startLeft = parseFloat(noteEl.style.left); startTop = parseFloat(noteEl.style.top); startWidth = parseFloat(noteEl.style.width);
+        if (e.target.classList.contains('resize-handle')) isResizing = true; else { isDragging = true; noteEl.classList.add('dragging'); }
     });
 
     noteEl.addEventListener('pointermove', (e) => {
         if (!isDragging && !isResizing) return;
-        const deltaX = e.clientX - startX; const deltaY = e.clientY - startY;
-
+        const deltaX = e.clientX - startX;
         if (isDragging) {
-            let newLeft = Math.max(0, startLeft + deltaX);
-            let newTop = Math.max(0, Math.min(startTop + deltaY, (ALL_NOTES.length - 1) * cellHeight()));
-            noteEl.style.left = `${newLeft}px`; noteEl.style.top = `${newTop}px`;
+            let newLeft = Math.max(0, Math.min(startLeft + deltaX, (4 * cellWidth()) - parseFloat(noteEl.style.width)));
+            noteEl.style.left = `${newLeft}px`; noteEl.style.top = `${Math.max(0, Math.min(startTop + e.clientY - startY, (ALL_NOTES.length - 1) * cellHeight()))}px`;
         }
-        if (isResizing) {
-            noteEl.style.width = `${Math.max(cellWidth() * currentSnapValue, startWidth + deltaX)}px`;
-        }
+        if (isResizing) noteEl.style.width = `${Math.max(cellWidth() * currentSnapValue, Math.min(startWidth + deltaX, (4 * cellWidth()) - parseFloat(noteEl.style.left)))}px`;
     });
 
     noteEl.addEventListener('pointerup', (e) => {
-        if (!isDragging && !isResizing) return;
+        if (!isDragging && !isResizing) return; clipEl = document.getElementById(activeClipRef.id);
         noteEl.releasePointerCapture(e.pointerId);
-
         if (isDragging) {
             isDragging = false; noteEl.classList.remove('dragging');
-            const snappedBeat = Math.round((parseFloat(noteEl.style.left) / cellWidth()) / currentSnapValue) * currentSnapValue;
-            const snappedNoteIndex = Math.round(parseFloat(noteEl.style.top) / cellHeight());
-            noteObj.beatStart = snappedBeat;
-            noteObj.note = ALL_NOTES[snappedNoteIndex];
+            noteObj.beatStart = Math.round((parseFloat(noteEl.style.left) / cellWidth()) / currentSnapValue) * currentSnapValue;
+            noteObj.note = ALL_NOTES[Math.round(parseFloat(noteEl.style.top) / cellHeight())];
             playTone(getFrequency(noteObj.note), 0.2);
         }
-        if (isResizing) {
-            isResizing = false;
-            const rawDuration = parseFloat(noteEl.style.width) / cellWidth();
-            noteObj.duration = Math.max(currentSnapValue, Math.round(rawDuration / currentSnapValue) * currentSnapValue);
-        }
-        updateNoteStylePosition(noteEl, noteObj);
-        updateTimelineOverview(activeTrackId);
+        if (isResizing) { isResizing = false; noteObj.duration = Math.max(currentSnapValue, Math.round((parseFloat(noteEl.style.width) / cellWidth()) / currentSnapValue) * currentSnapValue); }
+        updateNoteStylePosition(noteEl, noteObj); if (clipEl) renderClipPreviewMatrix(clipEl, activeClipRef);
     });
 
     noteEl.addEventListener('contextmenu', (e) => {
-        e.preventDefault(); noteEl.remove();
-        trackNotes[activeTrackId] = trackNotes[activeTrackId].filter(n => n.id !== noteObj.id);
-        updateTimelineOverview(activeTrackId);
+        e.preventDefault(); noteEl.remove(); clipEl = document.getElementById(activeClipRef.id);
+        activeClipRef.notes = activeClipRef.notes.filter(n => n.id !== noteObj.id);
+        if (clipEl) renderClipPreviewMatrix(clipEl, activeClipRef);
     });
 }
 
-function updateTimelineOverview(trackId) {
-    const overview = document.getElementById(`overview-${trackId}`);
-    if (overview) {
-        overview.classList.toggle('has-notes', trackNotes[trackId].length > 0);
-    }
-}
-
-// Sliders Zoom Event Triggers
 document.getElementById('timeline-zoom-x').addEventListener('input', (e) => {
     document.documentElement.style.setProperty('--timeline-block-width', `${e.target.value}px`);
+    Object.keys(trackClips).forEach(t => trackClips[t].forEach(c => { const el = document.getElementById(c.id); if (el) updateClipVisualPlacement(el, c); }));
 });
-
 document.getElementById('midi-zoom-x').addEventListener('input', (e) => {
-    const val = parseFloat(e.target.value);
-    document.documentElement.style.setProperty('--midi-cell-width', `${val}px`);
-    calculateAdaptiveSnapping(val);
-    if (activeTrackId) refreshAllNoteElementsPositions();
+    const val = parseFloat(e.target.value); document.documentElement.style.setProperty('--midi-cell-width', `${val}px`); calculateAdaptiveSnapping(val);
+    if (activeClipRef) { refreshAllNoteElementsPositions(); }
 });
-
 document.getElementById('midi-zoom-y').addEventListener('input', (e) => {
-    document.documentElement.style.setProperty('--midi-cell-height', `${e.target.value}px`);
-    if (activeTrackId) refreshAllNoteElementsPositions();
+    document.documentElement.style.setProperty('--midi-cell-height', `${e.target.value}px`); if (activeClipRef) refreshAllNoteElementsPositions();
 });
 
-function refreshAllNoteElementsPositions() {
-    trackNotes[activeTrackId].forEach(noteObj => {
-        const el = document.getElementById(noteObj.id);
-        if (el) updateNoteStylePosition(el, noteObj);
-    });
-}
+function refreshAllNoteElementsPositions() { activeClipRef.notes.forEach(noteObj => { const el = document.getElementById(noteObj.id); if (el) updateNoteStylePosition(el, noteObj); }); }
+document.getElementById('close-midi-btn').addEventListener('click', () => { document.getElementById('midi-editor').classList.add('hidden'); });
+function deleteTrack(trackId) { document.getElementById(`row-${trackId}`).remove(); delete trackClips[trackId]; document.getElementById('midi-editor').classList.add('hidden'); }
 
-document.getElementById('close-midi-btn').addEventListener('click', () => {
-    document.getElementById('midi-editor').classList.add('hidden');
-});
-
-function deleteTrack(trackId) {
-    document.getElementById(`row-${trackId}`).remove();
-    delete trackNotes[trackId];
-    if (activeTrackId === trackId) document.getElementById('midi-editor').classList.add('hidden');
-}
-
-// Startup Framework Triggers
-generateInfiniteTimelineRuler();
-document.documentElement.style.setProperty('--timeline-block-width', '100px');
-document.documentElement.style.setProperty('--midi-cell-width', '200px');
-document.documentElement.style.setProperty('--midi-cell-height', '24px');
+generateTimelineRuler();
