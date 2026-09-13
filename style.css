@@ -1,5 +1,5 @@
 :root {
-    --timeline-block-width: 200px; /* Base width for 1 full structural Bar on timeline */
+    --timeline-block-width: 200px; /* Base width for 1 full Bar */
     --midi-cell-width: 200px;      /* Base width for 1 beat inside the MIDI roll */
     --midi-cell-height: 24px;
     --midi-subdivisions: 4;
@@ -27,7 +27,7 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
     background: #111; color: #ff9800; width: 60px; text-align: center; border: 1px solid #555; padding: 4px; font-weight: bold; border-radius: 4px;
 }
 
-/* Workspace Framework Setup Split panels */
+/* Layout Framework Panels */
 .workspace { display: flex; flex: 1; overflow: hidden; }
 .sidebar {
     width: 200px; background-color: #202026; border-right: 2px solid #111; padding: 15px; display: flex; flex-direction: column; gap: 10px;
@@ -35,63 +35,40 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 .add-btn { width: 100%; text-align: left; background: #2b2b33; font-weight: bold; }
 .editor-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-/* Infinite Arrangement Timeline Window */
-.timeline-container { background: #15151a; height: 35%; overflow-y: auto; overflow-x: auto; border-bottom: 3px solid #111;}
+/* Arrangement Timeline Window */
+.timeline-container { background: #15151a; height: 35%; overflow: auto; border-bottom: 3px solid #111; position: relative; }
 .timeline-ruler { display: flex; background: #222228; height: 30px; align-items: center; width: max-content; min-width: 100%; }
 .ruler-spacer { width: 200px; min-width: 200px; padding-left: 10px; font-size: 0.8rem; color: #888; border-right: 1px solid #333; position: sticky; left: 0; background: #222228; z-index: 12; }
 .ruler-ticks { display: flex; position: relative; }
 .tick { width: var(--timeline-block-width); min-width: var(--timeline-block-width); max-width: var(--timeline-block-width); font-size: 0.75rem; color: #666; text-align: left; padding-left: 5px; border-right: 1px solid #222;}
 
-/* Track Rows Layout Grid Canvas */
-.tracks-list { width: max-content; min-width: 100%; }
+/* Track Rows */
+.tracks-list { width: max-content; min-width: 100%; position: relative; }
 .track-row { display: flex; height: 60px; border-bottom: 1px solid #222; width: max-content; min-width: 100%; }
 .track-header { width: 200px; min-width: 200px; max-width: 200px; background: #26262d; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; border-right: 1px solid #333; position: sticky; left: 0; z-index: 11; }
 .track-title { font-size: 0.85rem; font-weight: bold; }
 .track-controls { display: flex; gap: 4px; }
 .track-controls button { padding: 2px 6px; font-size: 0.7rem; }
 
-/* Timeline Canvas Grid background setup */
 .track-timeline { 
-    display: flex; 
-    flex: 1; 
-    position: relative;
+    display: flex; flex: 1; position: relative; min-width: 5000px; background-color: #141417;
     background-image: linear-gradient(to right, #2d2d35 1px, transparent 1px);
-    background-size: calc(var(--timeline-block-width) / 4) 100%; /* Shows beat increments implicitly */
-    min-width: 5000px;
-    background-color: #141417;
+    background-size: calc(var(--timeline-block-width) / 4) 100%;
 }
 
-/* Playhead Tracker line */
 #playhead-line {
     position: absolute; top: 0; bottom: 0; width: 2px; background: #ffeb3b; z-index: 100; pointer-events: none; left: 0; display: none;
 }
 
-/* --- FL Studio Timeline Clips / Blocks --- */
+/* --- Timeline Clips / Patterns --- */
 .timeline-clip {
-    position: absolute;
-    top: 4px;
-    height: 50px;
-    background: #2e3d52;
-    border: 1px solid #4a6585;
-    border-radius: 4px;
-    cursor: move;
-    z-index: 5;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    position: absolute; top: 4px; height: 50px; background: #2e3d52; border: 1px solid #4a6585; border-radius: 4px; cursor: move; z-index: 5; overflow: hidden; display: flex; flex-direction: column;
 }
-.timeline-clip.selected { border-color: #ff9800; box-shadow: 0 0 5px rgba(255, 152, 0, 0.4); }
+.timeline-clip.selected { border-color: #ff9800; box-shadow: 0 0 8px #ff9800; background: #3a4d66; }
 .clip-title { font-size: 0.65rem; color: #aaa; background: rgba(0,0,0,0.3); padding: 1px 4px; font-weight: bold; }
+.clip-preview-canvas { flex: 1; width: 100%; pointer-events: none; background: rgba(0,0,0,0.15); }
 
-/* Canvas note preview matrix renderer window */
-.clip-preview-canvas {
-    flex: 1;
-    width: 100%;
-    pointer-events: none; /* Mouse clicks bypass canvas layer directly into move handler */
-    background: rgba(0,0,0,0.15);
-}
-
-/* --- MIDI Piano Roll Canvas Panel --- */
+/* --- MIDI Piano Roll --- */
 .midi-editor { flex: 1; display: flex; flex-direction: column; background: #1c1c22; overflow: hidden; }
 .midi-editor.hidden { display: none; }
 .midi-header { display: flex; justify-content: space-between; background: #2d2d37; padding: 8px 15px; border-bottom: 1px solid #111; align-items: center; }
@@ -100,7 +77,6 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 
 .piano-roll-container { display: flex; flex: 1; overflow: auto; background: #121214; position: relative; }
 .piano-keys { width: 60px; min-width: 60px; display: flex; flex-direction: column; background: #222; z-index: 15; position: sticky; left: 0; }
-
 .piano-key { 
     height: var(--midi-cell-height); min-height: var(--midi-cell-height); max-height: var(--midi-cell-height); 
     border-bottom: 1px solid #111; font-size: 0.65rem; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px;
@@ -108,26 +84,29 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 .white-key { background: #e0e0e0; color: #000; }
 .black-key { background: #333; color: #fff; border-left: 8px solid #ff9800; }
 
-.piano-grid { display: flex; flex-direction: column; position: relative; flex: 1; min-width: 2000px; }
-
-/* Dynamic Grid Row Sheets */
+.piano-grid { display: flex; flex-direction: column; position: relative; flex: 1; min-width: 4000px; }
 .grid-row { 
     display: flex; height: var(--midi-cell-height); min-height: var(--midi-cell-height); max-height: var(--midi-cell-height); position: relative;
-    background-image: 
-        linear-gradient(to right, rgba(29, 29, 36, 0.4) 1px, transparent 1px),
-        linear-gradient(to right, #1d1d24 1px, transparent 1px);
+    background-image: linear-gradient(to right, rgba(29, 29, 36, 0.4) 1px, transparent 1px), linear-gradient(to right, #1d1d24 1px, transparent 1px);
     background-size: calc(var(--midi-cell-width) / var(--midi-subdivisions)) 100%, var(--midi-cell-width) 100%;
     background-color: #18181c; border-bottom: 1px solid #1d1d24;
 }
 .grid-row:nth-child(even) { background-color: #151518; }
 
-/* Draggable MIDI Notes Canvas Objects */
+/* --- Draggable MIDI Notes --- */
 .piano-note {
-    position: absolute; background: linear-gradient(135deg, #ff9800, #e65100); border: 1px solid #ffffff; border-radius: 4px; z-index: 50; cursor: move; box-shadow: 0 2px 5px rgba(0,0,0,0.4); touch-action: none; display: block !important; 
+    position: absolute; background: linear-gradient(135deg, #ff9800, #e65100); border: 1px solid #ffffff; border-radius: 4px; z-index: 50; cursor: move; box-shadow: 0 2px 5px rgba(0,0,0,0.4); touch-action: none;
 }
-.piano-note.dragging { opacity: 0.85; box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
+.piano-note.selected { border-color: #00e5ff; box-shadow: 0 0 8px #00e5ff; background: linear-gradient(135deg, #00b0ff, #0081cb); }
+.piano-note.dragging { opacity: 0.85; }
 
+/* Reusable Resize Handles (Used by Notes and Bars) */
 .resize-handle {
-    position: absolute; top: 0; right: 0; bottom: 0; width: 10px; background: rgba(255, 255, 255, 0.4); cursor: ew-resize; border-top-right-radius: 3px; border-bottom-right-radius: 3px; z-index: 51;
+    position: absolute; top: 0; right: 0; bottom: 0; width: 10px; background: rgba(255, 255, 255, 0.3); cursor: ew-resize; z-index: 51;
 }
-.resize-handle:hover { background: rgba(255, 255, 255, 0.7); }
+.resize-handle:hover { background: rgba(255, 255, 255, 0.6); }
+
+/* --- Lasso Selection Selection Box Marquee --- */
+.selection-marquee {
+    position: absolute; border: 1px dotted #00e5ff; background-color: rgba(0, 229, 255, 0.15); pointer-events: none; z-index: 200; display: none;
+}
