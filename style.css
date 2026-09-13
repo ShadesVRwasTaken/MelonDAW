@@ -1,3 +1,6 @@
+/* ==========================================================================
+   GLOBAL DESIGN VARIABLES, TOOLBAR, & ARRANGEMENT VIEW
+   ========================================================================== */
 :root {
     --timeline-block-width: 200px; 
     --midi-cell-width: 200px;      
@@ -74,17 +77,24 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 .clip-title { font-size: 0.65rem; color: #aaa; background: rgba(0,0,0,0.3); padding: 1px 4px; font-weight: bold; }
 .clip-preview-canvas { flex: 1; width: 100%; pointer-events: none; background: rgba(0,0,0,0.15); }
 
+/* ==========================================================================
+   MIDI PIANO ROLL WORKSPACE ENVIRONMENT & INTERACTIVE OBJECTS
+   ========================================================================== */
 .midi-editor { flex: 1; display: flex; flex-direction: column; background: #1c1c22; overflow: hidden; height: 60%; }
 .midi-editor.hidden { display: none !important; }
-.midi-header { display: flex; justify-content: space-between; background: #2d2d37; padding: 8px 15px; border-bottom: 1px solid #111; align-items: center; height: 40px; }
+
+.midi-header { 
+    display: flex; justify-content: space-between; background: #2d2d37; padding: 8px 15px; border-bottom: 1px solid #111; align-items: center; height: 40px; 
+}
 .midi-header h4 { margin: 0; color: #ff9800; font-size: 0.9rem; }
 .midi-zoom-controls { display: flex; gap: 20px; font-size: 0.8rem; color: #aaa; align-items: center; }
 
 .piano-roll-container { display: flex; flex: 1; overflow: auto; background: #121214; position: relative; }
-.piano-keys { width: 60px; min-width: 60px; display: flex; flex-direction: column; background: #222; z-index: 15; position: sticky; left: 0; }
+.piano-keys { width: 60px; min-width: 60px; display: flex; flex-direction: column; background: #222; z-index: 15; position: sticky; left: 0; margin-top: 20px; }
+
 .piano-key { 
     height: var(--midi-cell-height); min-height: var(--midi-cell-height); max-height: var(--midi-cell-height); 
-    border-bottom: 1px solid #111; font-size: 0.65rem; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px;
+    border-bottom: 1px solid #1d1d24; font-size: 0.65rem; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px;
 }
 .white-key { background: #e0e0e0; color: #000; }
 .black-key { background: #333; color: #fff; border-left: 8px solid #ff9800; }
@@ -92,8 +102,6 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 .piano-grid { display: flex; flex-direction: column; position: relative; flex: 1; min-width: 4000px; }
 .grid-row { 
     display: flex; height: var(--midi-cell-height); min-height: var(--midi-cell-height); max-height: var(--midi-cell-height); position: relative;
-    background-image: linear-gradient(to right, rgba(29, 29, 36, 0.4) 1px, transparent 1px), linear-gradient(to right, #1d1d24 1px, transparent 1px);
-    background-size: calc(var(--midi-cell-width) / var(--midi-subdivisions)) 100%, var(--midi-cell-width) 100%;
     background-color: #18181c; border-bottom: 1px solid #1d1d24;
 }
 .grid-row:nth-child(even) { background-color: #151518; }
@@ -114,9 +122,9 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 }
 
 .midi-ruler {
-    height: 20px; background: #222228; border-bottom: 1px solid #111; position: relative; cursor: pointer; width: 100%;
+    height: 20px; background: #222228; border-bottom: 1px solid #111; position: relative; cursor: pointer; width: 100%; z-index: 16;
 }
-.midi-ruler-tick { position: absolute; font-size: 0.65rem; color: #555; padding-left: 4px; top: 2px; }
+.midi-ruler-tick { position: absolute; font-size: 0.65rem; color: #666; padding-left: 4px; top: 2px; }
 #midi-playhead-line {
-    position: absolute; top: 0; bottom: 0; width: 2px; background: #ffeb3b; z-index: 110; pointer-events: none; left: 0;
+    position: absolute; top: 0; bottom: -1500px; width: 2px; background: #ffeb3b; z-index: 110; pointer-events: none; left: 0;
 }

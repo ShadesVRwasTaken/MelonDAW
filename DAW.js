@@ -50,14 +50,16 @@ function playTone(freq, duration) {
 }
 
 // ==========================================================================
-// WINDOW 2: AUDIO SCHEDULING TRANSPORT TIMING CLOCK
+// WINDOW 2: AUDIO SCHEDULING TRANSPORT & TIME SETTER HANDLE
 // ==========================================================================
+let systemLoopStartTime = null; 
+
 function startTimelineLoop() {
     const timeResolutionMs = 25; 
-    const startTime = Date.now() - (currentSeconds * 1000) + 50; 
+    systemLoopStartTime = Date.now() - (currentSeconds * 1000) + 50; 
 
     playbackInterval = setInterval(() => {
-        const elapsedSec = (Date.now() - startTime) / 1000;
+        const elapsedSec = (Date.now() - systemLoopStartTime) / 1000;
         currentSeconds = Math.max(0, elapsedSec);
         const secondsPerBeat = 60 / bpm;
         const currentBeatPosition = currentSeconds / secondsPerBeat;
@@ -167,7 +169,7 @@ function initWindowSplitterResizer() {
 }
 
 // ==========================================================================
-// WINDOW 4: MASTER TIMELINE CONTROLS & TRACK LINE BUILDER
+// WINDOW 4: TIMELINE CONTROLS & TRACK LINE ARRANGEMENT
 // ==========================================================================
 document.getElementById('play-btn').addEventListener('click', async () => {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -217,7 +219,7 @@ function createTimelineRow(trackId, trackName, type) {
 }
 
 // ==========================================================================
-// WINDOW 5: CLIP PLACEMENT, SNAPPING, AND PREVIEW CANVASES
+// WINDOW 5: PATTERN BLOCKS & TIMELINE LASSO INTERACTION
 // ==========================================================================
 function createNewTimelineClip(trackId, barStart, timelineTrackEl) {
     const clipId = `clip-${Date.now()}`; const clipObj = { id: clipId, barStart: barStart, barDuration: 1, notes: [] };
@@ -327,6 +329,7 @@ function openPianoRoll(clipObj, trackId) {
         const cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
         const secondsPerBeat = 60 / bpm; const localBeatClicked = e.offsetX / cellWidth;
         currentSeconds = ((clipObj.barStart * 4) + localBeatClicked) * secondsPerBeat;
+        if (isPlaying) { systemLoopStartTime = Date.now() - (currentSeconds * 1000); }
         document.getElementById('midi-playhead-line').style.left = `${e.offsetX}px`;
     });
     gridContainer.appendChild(ruler); calculateAdaptiveSnapping(parseFloat(document.getElementById('midi-zoom-x').value));
