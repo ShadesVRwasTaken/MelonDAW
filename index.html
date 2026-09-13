@@ -40,10 +40,11 @@
                     <div class="timeline-ruler">
                         <div class="ruler-spacer">Arrangement View</div>
                         <div class="ruler-ticks">
-                            <div class="tick">Bar 1</div>
-                            <div class="tick">Bar 2</div>
-                            <div class="tick">Bar 3</div>
-                            <div class="tick">Bar 4</div>
+                            <!-- FIX: Fixed labeling to state Beats instead of incorrect Bars -->
+                            <div class="tick">Beat 1</div>
+                            <div class="tick">Beat 2</div>
+                            <div class="tick">Beat 3</div>
+                            <div class="tick">Beat 4</div>
                         </div>
                     </div>
                     <div id="tracks-list"></div>
@@ -55,12 +56,13 @@
                         <h4>🎹 MIDI Piano Roll Editor: <span id="current-editing-track">None</span></h4>
                         <!-- MIDI Roll Specific Zoom Sliders -->
                         <div class="midi-zoom-controls">
-                            <label>Width <input type="range" id="midi-zoom-x" min="50" max="400" value="100"></label>
-                            <label>Height <input type="range" id="midi-zoom-y" min="15" max="60" value="24"></label>
+                            <label>Width <input type="range" id="midi-zoom-x" min="40" max="300" value="100"></label>
+                            <label>Height <input type="range" id="midi-zoom-y" min="16" max="60" value="24"></label>
                         </div>
                         <button id="close-midi-btn">✕ Close Editor</button>
                     </div>
                     <div class="piano-roll-container">
+                        <!-- Key and Grid wrappers are contained here -->
                         <div id="piano-keys" class="piano-keys"></div>
                         <div id="piano-grid" class="piano-grid"></div>
                     </div>

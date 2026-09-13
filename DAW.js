@@ -237,32 +237,26 @@ function deleteTrack(trackId) {
         document.getElementById('midi-editor').classList.add('hidden');
     }
 }
-// ... (Your existing code above stays exactly the same) ...
+// ... (Keep all your existing track creation, sound engines, and data tracking layers on top intact) ...
 
 // --- Dynamic Scaling / Zoom Control Logic ---
 
 // 1. Timeline Zoom (Horizontal Only)
 document.getElementById('timeline-zoom-x').addEventListener('input', (e) => {
-    const value = e.target.value;
-    // Alters the width of each bar step column inside the arrangement timeline container
-    document.documentElement.style.setProperty('--timeline-block-width', `${value}px`);
+    document.documentElement.style.setProperty('--timeline-block-width', `${e.target.value}px`);
 });
 
 // 2. MIDI Piano Roll Zoom (Horizontal Width)
 document.getElementById('midi-zoom-x').addEventListener('input', (e) => {
-    const value = e.target.value;
-    // Multiplies or decreases cell spacing width wise
-    document.documentElement.style.setProperty('--midi-cell-width', `${value}px`);
+    document.documentElement.style.setProperty('--midi-cell-width', `${e.target.value}px`);
 });
 
-// 3. MIDI Piano Roll Zoom (Vertical Note Height)
+// 3. MIDI Piano Roll Zoom (Vertical Note Height - Universal variable)
 document.getElementById('midi-zoom-y').addEventListener('input', (e) => {
-    const value = e.target.value;
-    // Scales keyboard keys and grid row heights uniformly
-    document.documentElement.style.setProperty('--midi-cell-height', `${value}px`);
+    document.documentElement.style.setProperty('--midi-cell-height', `${e.target.value}px`);
 });
 
-// Set starting zoom profile definitions explicitly
+// Set default fallback system dimensions explicit values
 document.documentElement.style.setProperty('--timeline-block-width', '100px');
 document.documentElement.style.setProperty('--midi-cell-width', '100px');
 document.documentElement.style.setProperty('--midi-cell-height', '24px');

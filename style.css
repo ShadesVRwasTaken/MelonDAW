@@ -1,9 +1,11 @@
-/* Custom FL Studio Dark Scheme Configs */
 :root {
-    /* Dynamic parameters assigned natively via sliders */
     --timeline-block-width: 100px;
     --midi-cell-width: 100px;
     --midi-cell-height: 24px;
+}
+
+* {
+    box-sizing: border-box; /* Crucial to keep borders from adding invisible height pixels */
 }
 
 body {
@@ -55,18 +57,18 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 /* Timeline Setup Window */
 .timeline-container { background: #15151a; height: 35%; overflow-y: auto; border-bottom: 3px solid #111;}
 .timeline-ruler { display: flex; background: #222228; height: 30px; align-items: center; }
-.ruler-spacer { width: 200px; min-width: 200px; padding-left: 10px; font-size: 0.8rem; color: #888; border-right: 1px solid #333; box-sizing: border-box; }
+.ruler-spacer { width: 200px; min-width: 200px; padding-left: 10px; font-size: 0.8rem; color: #888; border-right: 1px solid #333; }
 .ruler-ticks { display: flex; flex: 1; }
-.tick { width: var(--timeline-block-width); min-width: var(--timeline-block-width); max-width: var(--timeline-block-width); font-size: 0.75rem; color: #666; text-align: left; padding-left: 5px; box-sizing: border-box; border-right: 1px solid #222;}
+.tick { width: var(--timeline-block-width); min-width: var(--timeline-block-width); max-width: var(--timeline-block-width); font-size: 0.75rem; color: #666; text-align: left; padding-left: 5px; border-right: 1px solid #222;}
 
 /* Rows */
 .track-row { display: flex; height: 50px; border-bottom: 1px solid #222; }
-.track-header { width: 200px; min-width: 200px; max-width: 200px; background: #26262d; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; border-right: 1px solid #333; box-sizing: border-box;}
+.track-header { width: 200px; min-width: 200px; max-width: 200px; background: #26262d; display: flex; justify-content: space-between; align-items: center; padding: 0 10px; border-right: 1px solid #333; }
 .track-title { font-size: 0.85rem; font-weight: bold; }
 .track-controls { display: flex; gap: 4px; }
 .track-controls button { padding: 2px 6px; font-size: 0.7rem; }
 .track-timeline { display: flex; flex: 1; overflow-x: hidden; }
-.timeline-block { width: var(--timeline-block-width); min-width: var(--timeline-block-width); max-width: var(--timeline-block-width); border-right: 1px dashed #333; position: relative; background: #17171d; box-sizing: border-box;}
+.timeline-block { width: var(--timeline-block-width); min-width: var(--timeline-block-width); max-width: var(--timeline-block-width); border-right: 1px dashed #333; position: relative; background: #17171d; }
 
 /* Visual Blocks Status indicators */
 .timeline-block.has-notes { background-color: #3b5c3d; border: 1px solid #4caf50; }
@@ -82,18 +84,44 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 .midi-zoom-controls { display: flex; gap: 15px; font-size: 0.8rem; color: #aaa; }
 .midi-zoom-controls input { vertical-align: middle; cursor: pointer; }
 
-.piano-roll-container { display: flex; flex: 1; overflow: scroll; background: #121214; }
-.piano-keys { width: 60px; min-width: 60px; display: flex; flex-direction: column; background: #222; }
+/* FIX: Handled strict alignment synchronization for scrolling side panels */
+.piano-roll-container { display: flex; flex: 1; overflow: auto; background: #121214; position: relative; }
+.piano-keys { width: 60px; min-width: 60px; display: flex; flex-direction: column; background: #222; z-index: 2; position: sticky; left: 0; }
 
 /* Piano Keys */
-.piano-key { height: var(--midi-cell-height); border-bottom: 1px solid #111; font-size: 0.65rem; display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; box-sizing: border-box;}
+.piano-key { 
+    height: var(--midi-cell-height); 
+    min-height: var(--midi-cell-height); 
+    max-height: var(--midi-cell-height); 
+    border-bottom: 1px solid #111; 
+    font-size: 0.65rem; 
+    display: flex; 
+    align-items: center; 
+    justify-content: flex-end; 
+    padding-right: 4px;
+}
 .white-key { background: #e0e0e0; color: #000; }
 .black-key { background: #333; color: #fff; }
 
 /* Note Grid Layout blocks sheets */
-.piano-grid { display: flex; flex-direction: column; }
-.grid-row { display: flex; height: var(--midi-cell-height); box-sizing: border-box; }
-.grid-cell { width: var(--midi-cell-width); min-width: var(--midi-cell-width); border-right: 1px solid #1d1d24; border-bottom: 1px solid #1d1d24; cursor: cell; background: #18181c; position: relative; box-sizing: border-box;}
+.piano-grid { display: flex; flex-direction: column; flex: 1; }
+
+/* FIX: Bound row structures to explicitly inherit height variables */
+.grid-row { 
+    display: flex; 
+    height: var(--midi-cell-height); 
+    min-height: var(--midi-cell-height); 
+    max-height: var(--midi-cell-height); 
+}
+.grid-cell { 
+    width: var(--midi-cell-width); 
+    min-width: var(--midi-cell-width); 
+    border-right: 1px solid #1d1d24; 
+    border-bottom: 1px solid #1d1d24; 
+    cursor: cell; 
+    background: #18181c; 
+    position: relative;
+}
 .grid-cell:nth-child(even) { background: #151518; }
 .grid-cell:hover { background: #282830; }
 .grid-cell.note-active { background: #ff9800 !important; border: 1px solid #fff; box-shadow: 0 0 6px #ff9800; }
