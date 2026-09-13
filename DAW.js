@@ -1,29 +1,28 @@
-// --- Native Audio Architecture Setup ---
+// ==========================================
+// PART 1: AUDIO CORE & STATE ARCHITECTURE
+// ==========================================
+
 let audioCtx = null;
 let trackCount = 0;
 let isPlaying = false;
-let currentBar = 0;
+let currentBeat = 0;
 let bpm = 120;
 let playbackInterval = null;
 let activeTrackId = null;
 
-// Track Data Stores
-const trackSequences = {}; // Format: { trackId: { noteKey: [false, false, false, false] } }
+// Track Global Registry Data Stores
+const trackNotes = {}; 
 
-// Frequencies for Octaves C0 to C8
 const NOTE_NAMES = ['B', 'A#', 'A', 'G#', 'G', 'F#', 'F', 'E', 'D#', 'D', 'C#', 'C'];
-const NOTE_FREQS = [];
 const ALL_NOTES = [];
 
-// Build Pitch Scale Table (C0 to C8)
+// Build Pitch Scale Frequency Reference Table (C0 to C8)
 for (let octave = 8; octave >= 0; octave--) {
     NOTE_NAMES.forEach(note => {
-        let name = `${note}${octave}`;
-        ALL_NOTES.push(name);
+        ALL_NOTES.push(`${note}${octave}`);
     });
 }
 
-// Fixed base mappings for synthetic node pitches
 function getFrequency(noteName) {
     const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     const name = noteName.slice(0, -1);
@@ -32,14 +31,9 @@ function getFrequency(noteName) {
     return 440 * Math.pow(2, (semitones - 9) / 12);
 }
 
-// 1. App Audio Drivers
 function initAudio() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
 }
 
 function playTone(freq, duration) {
@@ -60,37 +54,38 @@ function playTone(freq, duration) {
     osc.stop(audioCtx.currentTime + duration);
 }
 
-// 2. Transport Engine Loop
+// ==========================================
+// PART 2: TRANSPORT LOOP & TRACK UI BUILDERS
+// ==========================================
+
 function startTimelineLoop() {
-    const secondsPerBar = (60 / bpm) * 4; 
-    const stepTimeMs = (secondsPerBar / 4) * 1000; // Check quarterly per bar grid
+    const secondsPerBeat = 60 / bpm;
 
     playbackInterval = setInterval(() => {
-        // Visual Playhead Tracker Updates
         document.querySelectorAll('.timeline-block').forEach(b => {
-            if (parseInt(b.dataset.bar) === currentBar) {
+            if (parseInt(b.dataset.bar) === currentBeat) {
                 b.classList.add('playhead-current');
             } else {
                 b.classList.remove('playhead-current');
             }
         });
 
-        // Loop over tracks and scan structural note registers
-        Object.keys(trackSequences).forEach(trackId => {
-            const sequenceData = trackSequences[trackId];
-            Object.keys(sequenceData).forEach(noteName => {
-                if (sequenceData[noteName][currentBar]) {
-                    const frequency = getFrequency(noteName);
-                    playTone(frequency, 0.4);
+        Object.keys(trackNotes).forEach(trackId => {
+            const notes = trackNotes[trackId];
+            notes.forEach(noteObj => {
+                if (Math.floor(noteObj.beatStart) === currentBeat) {
+                    const frequency = getFrequency(noteObj.note);
+                    const noteDurationSeconds = noteObj.duration * secondsPerBeat;
+                    playTone(frequency, noteDurationSeconds);
                 }
             });
         });
 
-        currentBar = (currentBar + 1) % 4;
-    }, stepTimeMs);
+        currentBeat = (currentBeat + 1) % 4;
+    }, secondsPerBeat * 1000);
 }
 
-// 3. UI Interactions Handling
+// Master Toolbar Interface Drivers
 document.getElementById('play-btn').addEventListener('click', () => {
     initAudio();
     if (!isPlaying) {
@@ -109,7 +104,7 @@ document.getElementById('play-btn').addEventListener('click', () => {
 document.getElementById('stop-btn').addEventListener('click', () => {
     clearInterval(playbackInterval);
     isPlaying = false;
-    currentBar = 0;
+    currentBeat = 0;
     document.getElementById('play-btn').innerText = "▶ Play";
     document.getElementById('play-btn').classList.remove('active');
     document.querySelectorAll('.timeline-block').forEach(b => b.classList.remove('playhead-current'));
@@ -123,17 +118,11 @@ document.getElementById('bpm-input').addEventListener('input', (e) => {
     }
 });
 
-// Add Track Events
+// Appending Track Framework Rows
 document.getElementById('add-inst-btn').addEventListener('click', () => {
     trackCount++;
     const trackId = `track-${trackCount}`;
-    trackSequences[trackId] = {};
-    
-    // Default matrix steps configuration setup for C0-C8 notes
-    ALL_NOTES.forEach(note => {
-        trackSequences[trackId][note] = [false, false, false, false];
-    });
-
+    trackNotes[trackId] = [];
     createTimelineRow(trackId, `Instrument ${trackCount}`, 'instrument');
     openPianoRoll(trackId, `Instrument ${trackCount}`);
 });
@@ -141,14 +130,12 @@ document.getElementById('add-inst-btn').addEventListener('click', () => {
 document.getElementById('add-audio-btn').addEventListener('click', () => {
     trackCount++;
     const trackId = `track-${trackCount}`;
-    trackSequences[trackId] = { "C3": [false, false, false, false] };
+    trackNotes[trackId] = [];
     createTimelineRow(trackId, `Audio Sample ${trackCount}`, 'audio');
 });
 
-// 4. Render Arrangement Tracks UI
 function createTimelineRow(trackId, trackName, type) {
     const listContainer = document.getElementById('tracks-list');
-    
     const row = document.createElement('div');
     row.className = `track-row ${type}-track`;
     row.id = `row-${trackId}`;
@@ -171,7 +158,10 @@ function createTimelineRow(trackId, trackName, type) {
     listContainer.appendChild(row);
 }
 
-// 5. MIDI Piano Roll Render Canvas Matrix
+// ==========================================
+// PART 3: PIANO ROLL ENGINE & DRAG LOGIC
+// ==========================================
+
 function openPianoRoll(trackId, trackName) {
     activeTrackId = trackId;
     document.getElementById('current-editing-track').innerText = trackName;
@@ -179,50 +169,158 @@ function openPianoRoll(trackId, trackName) {
 
     const keysContainer = document.getElementById('piano-keys');
     const gridContainer = document.getElementById('piano-grid');
-
     keysContainer.innerHTML = '';
     gridContainer.innerHTML = '';
 
-    // Render nodes for full scale ranges from C0 to C8
     ALL_NOTES.forEach(noteName => {
-        // Render physical keyboard key element
         const key = document.createElement('div');
         key.className = `piano-key ${noteName.includes('#') ? 'black-key' : 'white-key'}`;
         key.innerText = noteName.endsWith('C') || noteName.includes('C') ? noteName : noteName.slice(0,2);
-        
-        // Single preview pitch testing on click
-        key.addEventListener('click', () => {
-            initAudio();
-            playTone(getFrequency(noteName), 0.2);
-        });
+        key.dataset.note = noteName;
+        key.addEventListener('click', () => { initAudio(); playTone(getFrequency(noteName), 0.2); });
         keysContainer.appendChild(key);
 
-        // Render timeline step blocks matching note key row
         const rowGrid = document.createElement('div');
         rowGrid.className = 'grid-row';
+        rowGrid.dataset.note = noteName;
 
         for (let b = 0; b < 4; b++) {
             const cell = document.createElement('div');
             cell.className = 'grid-cell';
-            if (trackSequences[trackId][noteName][b]) {
-                cell.classList.add('note-active');
-            }
-
-            cell.addEventListener('click', () => {
-                initAudio();
-                trackSequences[trackId][noteName][b] = !trackSequences[trackId][noteName][b];
-                cell.classList.toggle('note-active');
-                
-                // Update track visual overview status state
-                const overviewBlock = document.querySelector(`#row-${trackId} .timeline-block[data-bar="${b}"]`);
-                if (overviewBlock) {
-                    const hasActiveNotes = ALL_NOTES.some(n => trackSequences[trackId][n][b]);
-                    overviewBlock.classList.toggle('has-notes', hasActiveNotes);
-                }
-            });
+            cell.dataset.beat = b;
+            cell.addEventListener('dblclick', (e) => { e.stopPropagation(); createNewNote(trackId, noteName, b); });
             rowGrid.appendChild(cell);
         }
         gridContainer.appendChild(rowGrid);
+    });
+
+    trackNotes[trackId].forEach(noteObj => renderNoteElement(noteObj));
+    setTimeout(() => {
+        const c4Key = document.querySelector('.piano-key[data-note="C4"]');
+        if (c4Key) c4Key.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 100);
+}
+
+function createNewNote(trackId, noteName, beatStart) {
+    const noteId = `note-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    const newNoteObj = { id: noteId, note: noteName, beatStart: beatStart, duration: 1 };
+    trackNotes[trackId].push(newNoteObj);
+    renderNoteElement(newNoteObj);
+    playTone(getFrequency(noteName), 0.2);
+    updateTimelineOverview(trackId);
+}
+
+function renderNoteElement(noteObj) {
+    const gridContainer = document.getElementById('piano-grid');
+    const targetRow = document.querySelector(`.grid-row[data-note="${noteObj.note}"]`);
+    if (!targetRow) return;
+
+    const noteEl = document.createElement('div');
+    noteEl.className = 'piano-note';
+    noteEl.id = noteObj.id;
+    noteEl.innerHTML = `<div class="resize-handle"></div>`;
+
+    updateNoteStylePosition(noteEl, noteObj);
+    gridContainer.appendChild(noteEl);
+    setupNoteInteractions(noteEl, noteObj);
+}
+
+function updateNoteStylePosition(noteEl, noteObj) {
+    const cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width'));
+    const cellHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height'));
+    const noteIndex = ALL_NOTES.indexOf(noteObj.note);
+
+    noteEl.style.width = `${noteObj.duration * cellWidth}px`;
+    noteEl.style.height = `${cellHeight - 2}px`;
+    noteEl.style.left = `${noteObj.beatStart * cellWidth}px`;
+    noteEl.style.top = `${noteIndex * cellHeight + 1}px`;
+}
+
+function setupNoteInteractions(noteEl, noteObj) {
+    let isDragging = false, isResizing = false;
+    let startX, startY, startLeft, startTop, startWidth;
+
+    const cellWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width'));
+    const cellHeight = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height'));
+
+    noteEl.addEventListener('pointerdown', (e) => {
+        initAudio(); e.stopPropagation(); noteEl.setPointerCapture(e.pointerId);
+        startX = e.clientX; startY = e.clientY;
+        startLeft = parseFloat(noteEl.style.left); startTop = parseFloat(noteEl.style.top); startWidth = parseFloat(noteEl.style.width);
+
+        if (e.target.classList.contains('resize-handle')) { isResizing = true; } 
+        else { isDragging = true; noteEl.classList.add('dragging'); }
+    });
+
+    noteEl.addEventListener('pointermove', (e) => {
+        if (!isDragging && !isResizing) return;
+        const deltaX = e.clientX - startX; const deltaY = e.clientY - startY;
+
+        if (isDragging) {
+            let newLeft = startLeft + deltaX; let newTop = startTop + deltaY;
+            newLeft = Math.max(0, newLeft); newTop = Math.max(0, Math.min(newTop, (ALL_NOTES.length - 1) * cellHeight()));
+            noteEl.style.left = `${newLeft}px`; noteEl.style.top = `${newTop}px`;
+        }
+        if (isResizing) {
+            let newWidth = startWidth + deltaX;
+            noteEl.style.width = `${Math.max(cellWidth() * 0.25, newWidth)}px`;
+        }
+    });
+
+    noteEl.addEventListener('pointerup', (e) => {
+        if (!isDragging && !isResizing) return;
+        noteEl.releasePointerCapture(e.pointerId);
+
+        if (isDragging) {
+            isDragging = false; noteEl.classList.remove('dragging');
+            const snappedBeat = Math.round(parseFloat(noteEl.style.left) / cellWidth());
+            const snappedNoteIndex = Math.round(parseFloat(noteEl.style.top) / cellHeight());
+            noteObj.beatStart = Math.min(3, Math.max(0, snappedBeat));
+            noteObj.note = ALL_NOTES[snappedNoteIndex];
+            playTone(getFrequency(noteObj.note), 0.2);
+        }
+        if (isResizing) {
+            isResizing = false;
+            noteObj.duration = Math.max(0.25, Math.round((parseFloat(noteEl.style.width) / cellWidth()) * 4) / 4);
+        }
+        updateNoteStylePosition(noteEl, noteObj);
+        updateTimelineOverview(activeTrackId);
+    });
+
+    noteEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); noteEl.remove();
+        trackNotes[activeTrackId] = trackNotes[activeTrackId].filter(n => n.id !== noteObj.id);
+        updateTimelineOverview(activeTrackId);
+    });
+}
+
+function updateTimelineOverview(trackId) {
+    for (let b = 0; b < 4; b++) {
+        const overviewBlock = document.querySelector(`#row-${trackId} .timeline-block[data-bar="${b}"]`);
+        if (overviewBlock) {
+            const hasNotesOnBeat = trackNotes[trackId].some(n => Math.floor(n.beatStart) === b);
+            overviewBlock.classList.toggle('has-notes', hasNotesOnBeat);
+        }
+    }
+}
+
+// Global Custom Zoom Layout Event Callbacks
+document.getElementById('timeline-zoom-x').addEventListener('input', (e) => {
+    document.documentElement.style.setProperty('--timeline-block-width', `${e.target.value}px`);
+});
+document.getElementById('midi-zoom-x').addEventListener('input', (e) => {
+    document.documentElement.style.setProperty('--midi-cell-width', `${e.target.value}px`);
+    if (activeTrackId) refreshAllNoteElementsPositions();
+});
+document.getElementById('midi-zoom-y').addEventListener('input', (e) => {
+    document.documentElement.style.setProperty('--midi-cell-height', `${e.target.value}px`);
+    if (activeTrackId) refreshAllNoteElementsPositions();
+});
+
+function refreshAllNoteElementsPositions() {
+    trackNotes[activeTrackId].forEach(noteObj => {
+        const el = document.getElementById(noteObj.id);
+        if (el) updateNoteStylePosition(el, noteObj);
     });
 }
 
@@ -232,31 +330,11 @@ document.getElementById('close-midi-btn').addEventListener('click', () => {
 
 function deleteTrack(trackId) {
     document.getElementById(`row-${trackId}`).remove();
-    delete trackSequences[trackId];
-    if (activeTrackId === trackId) {
-        document.getElementById('midi-editor').classList.add('hidden');
-    }
+    delete trackNotes[trackId];
+    if (activeTrackId === trackId) document.getElementById('midi-editor').classList.add('hidden');
 }
-// ... (Keep all your existing track creation, sound engines, and data tracking layers on top intact) ...
 
-// --- Dynamic Scaling / Zoom Control Logic ---
-
-// 1. Timeline Zoom (Horizontal Only)
-document.getElementById('timeline-zoom-x').addEventListener('input', (e) => {
-    document.documentElement.style.setProperty('--timeline-block-width', `${e.target.value}px`);
-});
-
-// 2. MIDI Piano Roll Zoom (Horizontal Width)
-document.getElementById('midi-zoom-x').addEventListener('input', (e) => {
-    document.documentElement.style.setProperty('--midi-cell-width', `${e.target.value}px`);
-});
-
-// 3. MIDI Piano Roll Zoom (Vertical Note Height - Universal variable)
-document.getElementById('midi-zoom-y').addEventListener('input', (e) => {
-    document.documentElement.style.setProperty('--midi-cell-height', `${e.target.value}px`);
-});
-
-// Set default fallback system dimensions explicit values
+// Structural Initialization Default System Parameters
 document.documentElement.style.setProperty('--timeline-block-width', '100px');
 document.documentElement.style.setProperty('--midi-cell-width', '100px');
 document.documentElement.style.setProperty('--midi-cell-height', '24px');
