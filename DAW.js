@@ -159,7 +159,7 @@ function createTimelineRow(trackId, trackName, type) {
 }
 
 // ==========================================
-// PART 3: PIANO ROLL ENGINE & DRAG LOGIC
+// PART 3: PIANO ROLL ENGINE & DRAG LOGIC (FIXED)
 // ==========================================
 
 function openPianoRoll(trackId, trackName) {
@@ -225,9 +225,10 @@ function renderNoteElement(noteObj) {
     setupNoteInteractions(noteEl, noteObj);
 }
 
+// FIX: Added hardcoded numerical fallbacks to prevent invisible NaNpx sizing
 function updateNoteStylePosition(noteEl, noteObj) {
-    const cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width'));
-    const cellHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height'));
+    let cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 100;
+    let cellHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height')) || 24;
     const noteIndex = ALL_NOTES.indexOf(noteObj.note);
 
     noteEl.style.width = `${noteObj.duration * cellWidth}px`;
@@ -240,8 +241,8 @@ function setupNoteInteractions(noteEl, noteObj) {
     let isDragging = false, isResizing = false;
     let startX, startY, startLeft, startTop, startWidth;
 
-    const cellWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width'));
-    const cellHeight = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height'));
+    const cellWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 100;
+    const cellHeight = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height')) || 24;
 
     noteEl.addEventListener('pointerdown', (e) => {
         initAudio(); e.stopPropagation(); noteEl.setPointerCapture(e.pointerId);
