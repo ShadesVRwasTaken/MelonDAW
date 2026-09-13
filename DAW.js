@@ -1,19 +1,105 @@
-// Global State Tracking
+// --- Native Audio Architecture Setup ---
+let audioCtx = null;
 let trackCount = 0;
 let isPlaying = false;
+let currentBar = 0;
+let bpm = 120;
+let playbackInterval = null;
+let activeTrackId = null;
 
-// 1. Core Transport Controls
-document.getElementById('play-btn').addEventListener('click', async () => {
-    // Web browsers strictly require user interaction before activating the Web Audio context
-    await Tone.start();
+// Track Data Stores
+const trackSequences = {}; // Format: { trackId: { noteKey: [false, false, false, false] } }
+
+// Frequencies for Octaves C0 to C8
+const NOTE_NAMES = ['B', 'A#', 'A', 'G#', 'G', 'F#', 'F', 'E', 'D#', 'D', 'C#', 'C'];
+const NOTE_FREQS = [];
+const ALL_NOTES = [];
+
+// Build Pitch Scale Table (C0 to C8)
+for (let octave = 8; octave >= 0; octave--) {
+    NOTE_NAMES.forEach(note => {
+        let name = `${note}${octave}`;
+        ALL_NOTES.push(name);
+    });
+}
+
+// Fixed base mappings for synthetic node pitches
+function getFrequency(noteName) {
+    const notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const name = noteName.slice(0, -1);
+    const octave = parseInt(noteName.slice(-1));
+    const semitones = notes.indexOf(name) + (octave - 4) * 12;
+    return 440 * Math.pow(2, (semitones - 9) / 12);
+}
+
+// 1. App Audio Drivers
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function playTone(freq, duration) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
     
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    
+    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+// 2. Transport Engine Loop
+function startTimelineLoop() {
+    const secondsPerBar = (60 / bpm) * 4; 
+    const stepTimeMs = (secondsPerBar / 4) * 1000; // Check quarterly per bar grid
+
+    playbackInterval = setInterval(() => {
+        // Visual Playhead Tracker Updates
+        document.querySelectorAll('.timeline-block').forEach(b => {
+            if (parseInt(b.dataset.bar) === currentBar) {
+                b.classList.add('playhead-current');
+            } else {
+                b.classList.remove('playhead-current');
+            }
+        });
+
+        // Loop over tracks and scan structural note registers
+        Object.keys(trackSequences).forEach(trackId => {
+            const sequenceData = trackSequences[trackId];
+            Object.keys(sequenceData).forEach(noteName => {
+                if (sequenceData[noteName][currentBar]) {
+                    const frequency = getFrequency(noteName);
+                    playTone(frequency, 0.4);
+                }
+            });
+        });
+
+        currentBar = (currentBar + 1) % 4;
+    }, stepTimeMs);
+}
+
+// 3. UI Interactions Handling
+document.getElementById('play-btn').addEventListener('click', () => {
+    initAudio();
     if (!isPlaying) {
-        Tone.Transport.start();
         isPlaying = true;
         document.getElementById('play-btn').innerText = "⏸ Pause";
         document.getElementById('play-btn').classList.add('active');
+        startTimelineLoop();
     } else {
-        Tone.Transport.pause();
+        clearInterval(playbackInterval);
         isPlaying = false;
         document.getElementById('play-btn').innerText = "▶ Play";
         document.getElementById('play-btn').classList.remove('active');
@@ -21,115 +107,133 @@ document.getElementById('play-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('stop-btn').addEventListener('click', () => {
-    Tone.Transport.stop();
+    clearInterval(playbackInterval);
     isPlaying = false;
+    currentBar = 0;
     document.getElementById('play-btn').innerText = "▶ Play";
     document.getElementById('play-btn').classList.remove('active');
+    document.querySelectorAll('.timeline-block').forEach(b => b.classList.remove('playhead-current'));
 });
 
-// Update BPM when changed
 document.getElementById('bpm-input').addEventListener('input', (e) => {
-    let bpmValue = parseFloat(e.target.value);
-    if (bpmValue > 0) {
-        Tone.Transport.bpm.value = bpmValue;
+    bpm = parseInt(e.target.value) || 120;
+    if (isPlaying) {
+        clearInterval(playbackInterval);
+        startTimelineLoop();
     }
 });
 
-// 2. Dynamic Track Creation Logic
-const tracksList = document.getElementById('tracks-list');
-
-// Add Instrument Track (+)
+// Add Track Events
 document.getElementById('add-inst-btn').addEventListener('click', () => {
     trackCount++;
+    const trackId = `track-${trackCount}`;
+    trackSequences[trackId] = {};
     
-    // Create an independent Tone.js Synthesizer for this track
-    const synth = new Tone.PolySynth(Tone.Synth).toDestination();
-
-    createTrackElement(`Track ${trackCount} (Synth)`, 'instrument', (time, isRegionClicked) => {
-        if (isRegionClicked) {
-            // Play a standard chord or note when timeline region is clicked / triggered
-            synth.triggerAttackRelease(["C4", "E4", "G4"], "2n", time);
-        }
+    // Default matrix steps configuration setup for C0-C8 notes
+    ALL_NOTES.forEach(note => {
+        trackSequences[trackId][note] = [false, false, false, false];
     });
+
+    createTimelineRow(trackId, `Instrument ${trackCount}`, 'instrument');
+    openPianoRoll(trackId, `Instrument ${trackCount}`);
 });
 
-// Add Audio Track (+)
 document.getElementById('add-audio-btn').addEventListener('click', () => {
     trackCount++;
-
-    // Fallback synth mimicking a drum/audio sample trigger since local file assets vary in Codespaces
-    const samplerMock = new Tone.NoiseSynth({
-        envelope: { attack: 0.001, decay: 0.1, sustain: 0 }
-    }).toDestination();
-
-    createTrackElement(`Track ${trackCount} (Audio)`, 'audio', (time, isRegionClicked) => {
-        if (isRegionClicked) {
-            samplerMock.triggerAttackRelease("2n", time);
-        }
-    });
+    const trackId = `track-${trackCount}`;
+    trackSequences[trackId] = { "C3": [false, false, false, false] };
+    createTimelineRow(trackId, `Audio Sample ${trackCount}`, 'audio');
 });
 
-// 3. Helper function to render tracks & link blocks to timeline schedule
-function createTrackElement(trackName, trackType, audioTriggerCallback) {
-    const trackRow = document.createElement('div');
-    trackRow.className = `track-row ${trackType}-track`;
+// 4. Render Arrangement Tracks UI
+function createTimelineRow(trackId, trackName, type) {
+    const listContainer = document.getElementById('tracks-list');
+    
+    const row = document.createElement('div');
+    row.className = `track-row ${type}-track`;
+    row.id = `row-${trackId}`;
 
-    // Track Control Header Panel (Left Side)
-    const trackHeader = document.createElement('div');
-    trackHeader.className = 'track-header';
-    trackHeader.innerHTML = `
-        <span class="track-title">${trackName}</span>
-        <div class="track-controls">
-            <button class="mute-btn">M</button>
-            <button class="delete-btn">🗑</button>
+    row.innerHTML = `
+        <div class="track-header">
+            <span class="track-title">${trackName}</span>
+            <div class="track-controls">
+                ${type === 'instrument' ? `<button class="edit-midi-btn" onclick="openPianoRoll('${trackId}', '${trackName}')">🎹 Edit</button>` : ''}
+                <button class="delete-btn" onclick="deleteTrack('${trackId}')">🗑</button>
+            </div>
+        </div>
+        <div class="track-timeline">
+            <div class="timeline-block" data-bar="0"></div>
+            <div class="timeline-block" data-bar="1"></div>
+            <div class="timeline-block" data-bar="2"></div>
+            <div class="timeline-block" data-bar="3"></div>
         </div>
     `;
+    listContainer.appendChild(row);
+}
 
-    // Timeline Blocks Region (Right Side)
-    const trackTimeline = document.createElement('div');
-    trackTimeline.className = 'track-timeline';
-    
-    // Create 4 distinct bars/blocks along the grid matching FL Studio layout
-    const blocksState = [false, false, false, false];
-    
-    for (let i = 0; i < 4; i++) {
-        const block = document.createElement('div');
-        block.className = 'timeline-block';
-        block.dataset.bar = i;
+// 5. MIDI Piano Roll Render Canvas Matrix
+function openPianoRoll(trackId, trackName) {
+    activeTrackId = trackId;
+    document.getElementById('current-editing-track').innerText = trackName;
+    document.getElementById('midi-editor').classList.remove('hidden');
+
+    const keysContainer = document.getElementById('piano-keys');
+    const gridContainer = document.getElementById('piano-grid');
+
+    keysContainer.innerHTML = '';
+    gridContainer.innerHTML = '';
+
+    // Render nodes for full scale ranges from C0 to C8
+    ALL_NOTES.forEach(noteName => {
+        // Render physical keyboard key element
+        const key = document.createElement('div');
+        key.className = `piano-key ${noteName.includes('#') ? 'black-key' : 'white-key'}`;
+        key.innerText = noteName.endsWith('C') || noteName.includes('C') ? noteName : noteName.slice(0,2);
         
-        block.addEventListener('click', () => {
-            blocksState[i] = !blocksState[i];
-            block.classList.toggle('active-block', blocksState[i]);
+        // Single preview pitch testing on click
+        key.addEventListener('click', () => {
+            initAudio();
+            playTone(getFrequency(noteName), 0.2);
         });
-        
-        trackTimeline.appendChild(block);
-    }
+        keysContainer.appendChild(key);
 
-    // Connect this specific track sequence to the main audio timeline loop
-    Tone.Transport.scheduleRepeat((time) => {
-        // Quantize position into 4 bars loop
-        const currentBar = Math.floor(Tone.Transport.position.split(':')[0]) % 4;
-        
-        // Visually pulse active playheads
-        const allBlocks = trackTimeline.querySelectorAll('.timeline-block');
-        allBlocks.forEach((b, idx) => {
-            if (idx === currentBar && isPlaying) {
-                b.classList.add('playhead-current');
-            } else {
-                b.classList.remove('playhead-current');
+        // Render timeline step blocks matching note key row
+        const rowGrid = document.createElement('div');
+        rowGrid.className = 'grid-row';
+
+        for (let b = 0; b < 4; b++) {
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            if (trackSequences[trackId][noteName][b]) {
+                cell.classList.add('note-active');
             }
-        });
 
-        // Trigger sound if block is scheduled active by user click
-        audioTriggerCallback(time, blocksState[currentBar]);
-    }, "1m"); // "1m" checks exact sound triggers once every full bar length
-
-    // Handle Delete Track
-    trackHeader.querySelector('.delete-btn').addEventListener('click', () => {
-        trackRow.remove();
+            cell.addEventListener('click', () => {
+                initAudio();
+                trackSequences[trackId][noteName][b] = !trackSequences[trackId][noteName][b];
+                cell.classList.toggle('note-active');
+                
+                // Update track visual overview status state
+                const overviewBlock = document.querySelector(`#row-${trackId} .timeline-block[data-bar="${b}"]`);
+                if (overviewBlock) {
+                    const hasActiveNotes = ALL_NOTES.some(n => trackSequences[trackId][n][b]);
+                    overviewBlock.classList.toggle('has-notes', hasActiveNotes);
+                }
+            });
+            rowGrid.appendChild(cell);
+        }
+        gridContainer.appendChild(rowGrid);
     });
+}
 
-    trackRow.appendChild(trackHeader);
-    trackRow.appendChild(trackTimeline);
-    tracksList.appendChild(trackRow);
+document.getElementById('close-midi-btn').addEventListener('click', () => {
+    document.getElementById('midi-editor').classList.add('hidden');
+});
+
+function deleteTrack(trackId) {
+    document.getElementById(`row-${trackId}`).remove();
+    delete trackSequences[trackId];
+    if (activeTrackId === trackId) {
+        document.getElementById('midi-editor').classList.add('hidden');
+    }
 }

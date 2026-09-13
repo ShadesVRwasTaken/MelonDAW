@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MelonDAW</title>
-    <!-- FIX: Added ./ to make the path relative for GitHub Pages -->
     <link rel="stylesheet" href="./style.css">
-    <!-- Load Tone.js from CDN securely -->
-    <script src="https://cloudflare.com"></script>
 </head>
 <body>
     <div id="daw-app">
-        <!-- Top Menu Bar (FL Studio Style) -->
+        <!-- Top Toolbar (FL Studio Style) -->
         <header class="toolbar">
             <div class="logo">🍈 MelonDAW</div>
             <div class="transport-controls">
@@ -24,37 +21,48 @@
             </div>
         </header>
 
-        <!-- Main Workspace Split -->
+        <!-- Main Workspace -->
         <main class="workspace">
-            <!-- Sidebar: Track Adding Panel -->
+            <!-- Left Sidebar -->
             <aside class="sidebar">
                 <h3>Add Track</h3>
-                <button id="add-inst-btn" class="add-btn">+ Instrument Synth</button>
-                <button id="add-audio-btn" class="add-btn">+ Audio Sample</button>
+                <button id="add-inst-btn" class="add-btn">+ Instrument Track</button>
+                <button id="add-audio-btn" class="add-btn">+ Audio Track</button>
             </aside>
 
-            <!-- Arrangement Window / Timeline -->
-            <section class="timeline-container">
-                <!-- Timeline Header (Ruler showing bars) -->
-                <div class="timeline-ruler">
-                    <div class="ruler-spacer"></div>
-                    <div class="ruler-ticks">
-                        <div class="tick">Bar 1</div>
-                        <div class="tick">Bar 2</div>
-                        <div class="tick">Bar 3</div>
-                        <div class="tick">Bar 4</div>
+            <!-- Right Workspace Split: Timeline & Piano Roll -->
+            <section class="editor-area">
+                <!-- Arrangement Timeline (Top View) -->
+                <div class="timeline-container">
+                    <div class="timeline-ruler">
+                        <div class="ruler-spacer">Arrangement View</div>
+                        <div class="ruler-ticks">
+                            <div class="tick">Bar 1</div>
+                            <div class="tick">Bar 2</div>
+                            <div class="tick">Bar 3</div>
+                            <div class="tick">Bar 4</div>
+                        </div>
                     </div>
+                    <div id="tracks-list"></div>
                 </div>
 
-                <!-- Tracks list container -->
-                <div id="tracks-list">
-                    <!-- Dynamic tracks append here via JS -->
+                <!-- MIDI Editor Piano Roll (Bottom View - Shows when instrument track is added) -->
+                <div id="midi-editor" class="midi-editor hidden">
+                    <div class="midi-header">
+                        <h4>🎹 MIDI Piano Roll Editor: <span id="current-editing-track">None</span></h4>
+                        <button id="close-midi-btn">✕ Close Editor</button>
+                    </div>
+                    <div class="piano-roll-container">
+                        <!-- Keys column on left -->
+                        <div id="piano-keys" class="piano-keys"></div>
+                        <!-- Note grid sheets on right -->
+                        <div id="piano-grid" class="piano-grid"></div>
+                    </div>
                 </div>
             </section>
         </main>
     </div>
 
-    <!-- FIX: Added ./ to make the script path relative for GitHub Pages -->
     <script src="./DAW.js"></script>
 </body>
 </html>
