@@ -1,6 +1,6 @@
-// ==========================================
-// WINDOW 1: CORE ENGINE & RUNTIME STATE
-// ==========================================
+// ==========================================================================
+// PART 1: CORE INFRASTRUCTURE & LAYOUT PANEL WINDOW RESIZER
+// ==========================================================================
 
 let audioCtx = null;
 let trackCount = 0;
@@ -13,7 +13,6 @@ const trackClips = {};
 let activeClipRef = null; 
 let currentSnapValue = 0.25;
 
-// Global selection lists for Mass Operations
 let selectedNoteIds = [];
 let selectedClipIds = [];
 
@@ -73,9 +72,7 @@ function startTimelineLoop() {
                 const triggerThreshold = timeResolutionMs / 1000 / secondsPerBeat;
 
                 clipObj.notes.forEach(noteObj => {
-                    // Check bounds to ignore notes cut off by a resized shorter bar length
                     if (noteObj.beatStart >= clipDurationBeats) return;
-
                     const absoluteNoteBeatPosition = clipBeatOffset + noteObj.beatStart;
                     if (currentBeatPosition >= absoluteNoteBeatPosition && currentBeatPosition < absoluteNoteBeatPosition + triggerThreshold) {
                         if (!noteObj.hasTriggered) {
@@ -92,9 +89,49 @@ function startTimelineLoop() {
     }, timeResolutionMs);
 }
 
-// ==========================================
-// WINDOW 2: RESIZABLE CLIPS & TIMELINE LASSO
-// ==========================================
+// Interactive Workspace Drag-to-Resize Matrix Panel Splitter Logic
+function initWindowSplitterResizer() {
+    const editorArea = document.querySelector('.editor-area');
+    const timelineContainer = document.querySelector('.timeline-container');
+    const midiEditor = document.getElementById('midi-editor');
+    
+    // Inject resizer structural bar between panels dynamically
+    const resizer = document.createElement('div');
+    resizer.className = 'window-resizer';
+    editorArea.insertBefore(resizer, midiEditor);
+
+    let isResizing = false;
+
+    resizer.addEventListener('pointerdown', (e) => {
+        isResizing = true;
+        resizer.classList.add('active-dragging');
+        resizer.setPointerCapture(e.pointerId);
+    });
+
+    resizer.addEventListener('pointermove', (e) => {
+        if (!isResizing) return;
+        const editorRect = editorArea.getBoundingClientRect();
+        const pointerYRelative = e.clientY - editorRect.top;
+        
+        // Compute calculated percentages for panel heights bounds constraints
+        let percentageTimeline = (pointerYRelative / editorRect.height) * 100;
+        percentageTimeline = Math.max(15, Math.min(percentageTimeline, 80)); // limits bounds parameters safely
+        
+        timelineContainer.style.height = `${percentageTimeline}%`;
+        midiEditor.style.height = `${100 - percentageTimeline}%`;
+    });
+
+    resizer.addEventListener('pointerup', (e) => {
+        if (!isResizing) return;
+        isResizing = false;
+        resizer.classList.remove('active-dragging');
+        resizer.releasePointerCapture(e.pointerId);
+    });
+}
+
+// ==========================================================================
+// PART 2: RENAME TIMELINES & IMPROVED SELECTION TOOL
+// ==========================================================================
 
 document.getElementById('play-btn').addEventListener('click', () => {
     initAudio();
@@ -133,9 +170,10 @@ function createTimelineRow(trackId, trackName, type) {
     const listContainer = document.getElementById('tracks-list');
     const row = document.createElement('div'); row.className = `track-row ${type}-track`; row.id = `row-${trackId}`;
 
+    // FIX: Replaced title text string with mutable text input field for rename capabilities
     row.innerHTML = `
         <div class="track-header">
-            <span class="track-title">${trackName}</span>
+            <input type="text" class="track-title-input" value="${trackName}" title="Double click to rename">
             <div class="track-controls"><button onclick="deleteTrack('${trackId}')">🗑</button></div>
         </div>
         <div class="track-timeline" data-trackid="${trackId}"></div>
@@ -149,12 +187,11 @@ function createTimelineRow(trackId, trackName, type) {
     });
 
     listContainer.appendChild(row);
-    setupTimelineLassoSelection();
+    setupTimelineLassoSelection(row.querySelector('.track-timeline'));
 }
 
 function createNewTimelineClip(trackId, barStart, timelineTrackEl) {
     const clipId = `clip-${Date.now()}`;
-    // barDuration tracking parameter defaults to 1 whole Bar
     const clipObj = { id: clipId, barStart: barStart, barDuration: 1, notes: [] };
     trackClips[trackId].push(clipObj);
 
@@ -206,25 +243,14 @@ function setupClipTimelineInteractions(clipEl, clipObj, trackId) {
 
     clipEl.addEventListener('pointermove', (e) => {
         const deltaX = e.clientX - startX;
-        if (isDragging) {
-            clipEl.style.left = `${Math.max(0, startLeft + deltaX)}px`;
-        }
-        if (isResizing) {
-            clipEl.style.width = `${Math.max(timelineZoomX() * 0.25, startWidth + deltaX)}px`;
-        }
+        if (isDragging) clipEl.style.left = `${Math.max(0, startLeft + deltaX)}px`;
+        if (isResizing) clipEl.style.width = `${Math.max(timelineZoomX() * 0.25, startWidth + deltaX)}px`;
     });
 
     clipEl.addEventListener('pointerup', (e) => {
         clipEl.releasePointerCapture(e.pointerId);
-        if (isDragging) {
-            isDragging = false;
-            clipObj.barStart = Math.round(parseFloat(clipEl.style.left) / timelineZoomX());
-        }
-        if (isResizing) {
-            isResizing = false;
-            // Snap pattern duration sizing to the nearest quarter bar chunk
-            clipObj.barDuration = Math.max(0.25, Math.round((parseFloat(clipEl.style.width) / timelineZoomX()) * 4) / 4);
-        }
+        if (isDragging) { isDragging = false; clipObj.barStart = Math.round(parseFloat(clipEl.style.left) / timelineZoomX()); }
+        if (isResizing) { isResizing = false; clipObj.barDuration = Math.max(0.25, Math.round((parseFloat(clipEl.style.width) / timelineZoomX()) * 4) / 4); }
         updateClipVisualPlacement(clipEl, clipObj);
     });
 
@@ -235,25 +261,26 @@ function setupClipTimelineInteractions(clipEl, clipObj, trackId) {
     });
 }
 
-// Global Timeline Lasso Rectangle Selector Node System
-function setupTimelineLassoSelection() {
-    const listContainer = document.getElementById('tracks-list');
+// FIX: Completely rewritten stable pointer loop for structural lasso tools
+function setupTimelineLassoSelection(timelineEl) {
     let marquee = document.getElementById('timeline-marquee');
-    
     if (!marquee) {
         marquee = document.createElement('div'); marquee.className = 'selection-marquee'; marquee.id = 'timeline-marquee';
-        listContainer.appendChild(marquee);
+        document.getElementById('tracks-list').appendChild(marquee);
     }
 
     let isSelecting = false, startX, startY;
 
-    listContainer.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.timeline-clip') || e.target.closest('.track-header')) return;
+    timelineEl.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.timeline-clip')) return;
         isSelecting = true;
+        timelineEl.setPointerCapture(e.pointerId);
+        
+        const listContainer = document.getElementById('tracks-list');
         const rect = listContainer.getBoundingClientRect();
         startX = e.clientX - rect.left + listContainer.scrollLeft;
         startY = e.clientY - rect.top + listContainer.scrollTop;
-        
+
         marquee.style.left = `${startX}px`; marquee.style.top = `${startY}px`;
         marquee.style.width = '0px'; marquee.style.height = '0px'; marquee.style.display = 'block';
 
@@ -261,8 +288,9 @@ function setupTimelineLassoSelection() {
         document.querySelectorAll('.timeline-clip').forEach(c => c.classList.remove('selected'));
     });
 
-    window.addEventListener('mousemove', (e) => {
+    timelineEl.addEventListener('pointermove', (e) => {
         if (!isSelecting) return;
+        const listContainer = document.getElementById('tracks-list');
         const rect = listContainer.getBoundingClientRect();
         const currentX = e.clientX - rect.left + listContainer.scrollLeft;
         const currentY = e.clientY - rect.top + listContainer.scrollTop;
@@ -273,31 +301,27 @@ function setupTimelineLassoSelection() {
         marquee.style.left = `${left}px`; marquee.style.top = `${top}px`;
         marquee.style.width = `${width}px`; marquee.style.height = `${height}px`;
 
-        // Mathematical rectangle collision detection tracking loop
         document.querySelectorAll('.timeline-clip').forEach(clipEl => {
+            const trackRowEl = clipEl.closest('.track-row');
             const cRect = {
-                left: clipEl.offsetLeft, top: clipEl.offsetTop + clipEl.parentElement.offsetTop,
-                right: clipEl.offsetLeft + clipEl.clientWidth, bottom: clipEl.offsetTop + clipEl.parentElement.offsetTop + clipEl.clientHeight
+                left: clipEl.offsetLeft, top: clipEl.offsetTop + trackRowEl.offsetTop,
+                right: clipEl.offsetLeft + clipEl.clientWidth, bottom: clipEl.offsetTop + trackRowEl.offsetTop + clipEl.clientHeight
             };
-
             const overlaps = !(left > cRect.right || left + width < cRect.left || top > cRect.bottom || top + height < cRect.top);
-            const clipId = clipEl.id;
-            
-            if (overlaps) {
-                clipEl.classList.add('selected');
-                if (!selectedClipIds.includes(clipId)) selectedClipIds.push(clipId);
-            } else {
-                clipEl.classList.remove('selected');
-                selectedClipIds = selectedClipIds.filter(id => id !== clipId);
-            }
+            if (overlaps) { clipEl.classList.add('selected'); if (!selectedClipIds.includes(clipEl.id)) selectedClipIds.push(clipEl.id); } 
+            else { clipEl.classList.remove('selected'); selectedClipIds = selectedClipIds.filter(id => id !== clipEl.id); }
         });
     });
 
-    window.addEventListener('mouseup', () => { if (isSelecting) { isSelecting = false; marquee.style.display = 'none'; } });
+    timelineEl.addEventListener('pointerup', (e) => {
+        if (!isSelecting) return; isSelecting = false;
+        timelineEl.releasePointerCapture(e.pointerId);
+        marquee.style.display = 'none';
+    });
 }
 
 // ==========================================================================
-// WINDOW 3 - PART A: PIANO ROLL RENDERING & NOTE SPAWNING
+// PART 3A: PIANO ROLL MATRIX BUILDER
 // ==========================================================================
 
 function renderClipPreviewMatrix(clipEl, clipObj) {
@@ -315,11 +339,9 @@ function renderClipPreviewMatrix(clipEl, clipObj) {
     clipObj.notes.forEach(note => {
         const clipDurationBeats = clipObj.barDuration * 4;
         if (note.beatStart >= clipDurationBeats) return; 
-
         const xStart = (note.beatStart / clipDurationBeats) * canvas.width;
         const width = (note.duration / clipDurationBeats) * canvas.width;
         const yStart = ((ALL_NOTES.indexOf(note.note) - minIdx) / idxRange) * (canvas.height - 6);
-
         ctx.fillRect(xStart, yStart, Math.max(4, width), 4);
     });
 }
@@ -334,7 +356,8 @@ function calculateAdaptiveSnapping(zoomWidth) {
 
 function openPianoRoll(clipObj, trackId) {
     activeClipRef = clipObj; selectedNoteIds = [];
-    document.getElementById('current-editing-track').innerText = `Pattern (Bar ${clipObj.barStart + 1})`;
+    const inputTitle = document.querySelector(`#row-${trackId} .track-title-input`).value;
+    document.getElementById('current-editing-track').innerText = `${inputTitle} (Bar ${clipObj.barStart + 1})`;
     document.getElementById('midi-editor').classList.remove('hidden');
 
     const keysContainer = document.getElementById('piano-keys'); const gridContainer = document.getElementById('piano-grid');
@@ -376,7 +399,7 @@ function createNewNote(noteName, beatStart, clipObj, trackId) {
 }
 
 // ==========================================================================
-// WINDOW 3 - PART B: NOTE DRAGS & MULTI-SELECTION ENGINE
+// PART 3B: NOTE MANIPULATOR & LASER LASSO ENGINE
 // ==========================================================================
 
 function renderNoteElement(noteObj, trackId) {
@@ -454,9 +477,11 @@ function setupMidiRollLassoSelection(gridContainer) {
     }
     let isSelecting = false, startX, startY;
 
-    gridContainer.addEventListener('mousedown', (e) => {
+    gridContainer.addEventListener('pointerdown', (e) => {
         if (e.target.closest('.piano-note')) return;
         isSelecting = true;
+        gridContainer.setPointerCapture(e.pointerId);
+        
         const rect = gridContainer.getBoundingClientRect();
         startX = e.clientX - rect.left + gridContainer.parentElement.scrollLeft;
         startY = e.clientY - rect.top + gridContainer.parentElement.scrollTop;
@@ -468,7 +493,7 @@ function setupMidiRollLassoSelection(gridContainer) {
         document.querySelectorAll('.piano-note').forEach(n => n.classList.remove('selected'));
     });
 
-    window.addEventListener('mousemove', (e) => {
+    gridContainer.addEventListener('pointermove', (e) => {
         if (!isSelecting) return;
         const rect = gridContainer.getBoundingClientRect();
         const currentX = e.clientX - rect.left + gridContainer.parentElement.scrollLeft;
@@ -497,7 +522,11 @@ function setupMidiRollLassoSelection(gridContainer) {
         });
     });
 
-    window.addEventListener('mouseup', () => { if (isSelecting) { isSelecting = false; marquee.style.display = 'none'; } });
+    gridContainer.addEventListener('pointerup', (e) => {
+        if (!isSelecting) return; isSelecting = false;
+        gridContainer.releasePointerCapture(e.pointerId);
+        marquee.style.display = 'none';
+    });
 }
 
 document.getElementById('timeline-zoom-x').addEventListener('input', (e) => {
@@ -517,3 +546,4 @@ document.getElementById('close-midi-btn').addEventListener('click', () => { docu
 function deleteTrack(trackId) { document.getElementById(`row-${trackId}`).remove(); delete trackClips[trackId]; document.getElementById('midi-editor').classList.add('hidden'); }
 
 generateTimelineRuler();
+initWindowSplitterResizer();
