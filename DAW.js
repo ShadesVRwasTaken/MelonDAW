@@ -321,7 +321,7 @@ function setupTimelineLassoSelection(timelineEl) {
 }
 
 // ==========================================================================
-// PART 3A: PIANO ROLL MATRIX BUILDER
+// PART 3A: PIANO ROLL MATRIX BUILDER (FIXED)
 // ==========================================================================
 
 function renderClipPreviewMatrix(clipEl, clipObj) {
@@ -373,11 +373,18 @@ function openPianoRoll(clipObj, trackId) {
         keysContainer.appendChild(key);
 
         const rowGrid = document.createElement('div'); rowGrid.className = 'grid-row'; rowGrid.dataset.note = noteName;
-        rowGrid.addEventListener('dblclick', (e) => {
+        
+        // FIX: Replaced unreliable dblclick loop with a highly accurate per-cell click calculation
+        rowGrid.addEventListener('click', (e) => {
+            if (e.target !== rowGrid && !e.target.classList.contains('grid-cell')) return;
             e.stopPropagation();
+            
             const cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
-            const snappedBeat = Math.round((e.offsetX / cellWidth) / currentSnapValue) * currentSnapValue;
-            if (snappedBeat >= 0 && snappedBeat < (clipObj.barDuration * 4)) { createNewNote(noteName, snappedBeat, clipObj, trackId); }
+            const snappedBeat = Math.floor((e.offsetX / cellWidth) / currentSnapValue) * currentSnapValue;
+            
+            if (snappedBeat >= 0 && snappedBeat < (clipObj.barDuration * 4)) { 
+                createNewNote(noteName, snappedBeat, clipObj, trackId); 
+            }
         });
         gridContainer.appendChild(rowGrid);
     });
@@ -392,6 +399,10 @@ function openPianoRoll(clipObj, trackId) {
 }
 
 function createNewNote(noteName, beatStart, clipObj, trackId) {
+    // Prevent creating duplicate overlapping notes on the exact same beat placement
+    const existing = clipObj.notes.find(n => n.note === noteName && n.beatStart === beatStart);
+    if (existing) return;
+
     const noteId = `note-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const newNoteObj = { id: noteId, note: noteName, beatStart: beatStart, duration: currentSnapValue, hasTriggered: false };
     clipObj.notes.push(newNoteObj); renderNoteElement(newNoteObj, trackId); playTone(getFrequency(noteName), 0.2);
@@ -399,7 +410,7 @@ function createNewNote(noteName, beatStart, clipObj, trackId) {
 }
 
 // ==========================================================================
-// PART 3B: NOTE MANIPULATOR & LASER LASSO ENGINE
+// PART 3B: NOTE MANIPULATOR & LASER LASSO ENGINE (FIXED)
 // ==========================================================================
 
 function renderNoteElement(noteObj, trackId) {
@@ -469,32 +480,28 @@ function setupNoteInteractions(noteEl, noteObj, trackId) {
     });
 }
 
+// FIX: Added a movement threshold so dragging creates a marquee, but a static tap falls through cleanly to add notes
 function setupMidiRollLassoSelection(gridContainer) {
     let marquee = document.getElementById('midi-marquee');
     if (!marquee) {
         marquee = document.createElement('div'); marquee.className = 'selection-marquee'; marquee.id = 'midi-marquee';
         gridContainer.appendChild(marquee);
     }
-    let isSelecting = false, startX, startY;
+    let isSelecting = false, startX, startY, hasMoved = false;
 
     gridContainer.addEventListener('pointerdown', (e) => {
         if (e.target.closest('.piano-note')) return;
         isSelecting = true;
-        gridContainer.setPointerCapture(e.pointerId);
+        hasMoved = false;
         
         const rect = gridContainer.getBoundingClientRect();
         startX = e.clientX - rect.left + gridContainer.parentElement.scrollLeft;
         startY = e.clientY - rect.top + gridContainer.parentElement.scrollTop;
-
-        marquee.style.left = `${startX}px`; marquee.style.top = `${startY}px`;
-        marquee.style.width = '0px'; marquee.style.height = '0px'; marquee.style.display = 'block';
-
-        selectedNoteIds = [];
-        document.querySelectorAll('.piano-note').forEach(n => n.classList.remove('selected'));
     });
 
     gridContainer.addEventListener('pointermove', (e) => {
         if (!isSelecting) return;
+        
         const rect = gridContainer.getBoundingClientRect();
         const currentX = e.clientX - rect.left + gridContainer.parentElement.scrollLeft;
         const currentY = e.clientY - rect.top + gridContainer.parentElement.scrollTop;
@@ -502,29 +509,38 @@ function setupMidiRollLassoSelection(gridContainer) {
         const left = Math.min(startX, currentX), top = Math.min(startY, currentY);
         const width = Math.abs(startX - currentX), height = Math.abs(startY - currentY);
 
-        marquee.style.left = `${left}px`; marquee.style.top = `${top}px`;
-        marquee.style.width = `${width}px`; marquee.style.height = `${height}px`;
+        // Only switch on the visual marquee frame if the mouse moves more than 5 pixels
+        if (width > 5 || height > 5) {
+            hasMoved = true;
+            gridContainer.setPointerCapture(e.pointerId);
+            marquee.style.left = `${left}px`; marquee.style.top = `${top}px`;
+            marquee.style.width = `${width}px`; marquee.style.height = `${height}px`;
+            marquee.style.display = 'block';
 
-        document.querySelectorAll('.piano-note').forEach(noteEl => {
-            const nRect = {
-                left: noteEl.offsetLeft, top: noteEl.offsetTop,
-                right: noteEl.offsetLeft + noteEl.clientWidth, bottom: noteEl.offsetTop + noteEl.clientHeight
-            };
-            const overlaps = !(left > nRect.right || left + width < nRect.left || top > nRect.bottom || top + height < nRect.top);
-            
-            if (overlaps) {
-                noteEl.classList.add('selected');
-                if (!selectedNoteIds.includes(noteEl.id)) selectedNoteIds.push(noteEl.id);
-            } else {
-                noteEl.classList.remove('selected');
-                selectedNoteIds = selectedNoteIds.filter(id => id !== noteEl.id);
-            }
-        });
+            document.querySelectorAll('.piano-note').forEach(noteEl => {
+                const nRect = {
+                    left: noteEl.offsetLeft, top: noteEl.offsetTop,
+                    right: noteEl.offsetLeft + noteEl.clientWidth, bottom: noteEl.offsetTop + noteEl.clientHeight
+                };
+                const overlaps = !(left > nRect.right || left + width < nRect.left || top > nRect.bottom || top + height < nRect.top);
+                
+                if (overlaps) {
+                    noteEl.classList.add('selected');
+                    if (!selectedNoteIds.includes(noteEl.id)) selectedNoteIds.push(noteEl.id);
+                } else {
+                    noteEl.classList.remove('selected');
+                    selectedNoteIds = selectedNoteIds.filter(id => id !== noteEl.id);
+                }
+            });
+        }
     });
 
     gridContainer.addEventListener('pointerup', (e) => {
-        if (!isSelecting) return; isSelecting = false;
-        gridContainer.releasePointerCapture(e.pointerId);
+        if (!isSelecting) return;
+        isSelecting = false;
+        if (hasMoved) {
+            gridContainer.releasePointerCapture(e.pointerId);
+        }
         marquee.style.display = 'none';
     });
 }
