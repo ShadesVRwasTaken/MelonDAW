@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MelonDAW</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Load Tone.js from CDN securely -->
+    <script src="https://cloudflare.com"></script>
+</head>
+<body>
+    <div id="daw-app">
+        <!-- Top Menu Bar (FL Studio Style) -->
+        <header class="toolbar">
+            <div class="logo">🍈 MelonDAW</div>
+            <div class="transport-controls">
+                <button id="play-btn">▶ Play</button>
+                <button id="stop-btn">■ Stop</button>
+            </div>
+            <div class="bpm-container">
+                <label for="bpm-input">BPM</label>
+                <input type="number" id="bpm-input" value="120" min="60" max="240">
+            </div>
+        </header>
+
+        <!-- Main Workspace Split -->
+        <main class="workspace">
+            <!-- Sidebar: Track Adding Panel -->
+            <aside class="sidebar">
+                <h3>Add Track</h3>
+                <button id="add-inst-btn" class="add-btn">+ Instrument Synth</button>
+                <button id="add-audio-btn" class="add-btn">+ Audio Sample</button>
+            </aside>
+
+            <!-- Arrangement Window / Timeline -->
+            <section class="timeline-container">
+                <!-- Timeline Header (Ruler showing bars) -->
+                <div class="timeline-ruler">
+                    <div class="ruler-spacer"></div>
+                    <div class="ruler-ticks">
+                        <div class="tick">Bar 1</div>
+                        <div class="tick">Bar 2</div>
+                        <div class="tick">Bar 3</div>
+                        <div class="tick">Bar 4</div>
+                    </div>
+                </div>
+
+                <!-- Tracks list container -->
+                <div id="tracks-list">
+                    <!-- Dynamic tracks append here via JS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="DAW.js"></script>
+</body>
+</html>
