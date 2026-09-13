@@ -8,7 +8,7 @@
 </head>
 <body>
     <div id="daw-app">
-        <!-- Top Toolbar (FL Studio Style) -->
+        <!-- Top Toolbar -->
         <header class="toolbar">
             <div class="logo">🍈 MelonDAW</div>
             <div class="transport-controls">
@@ -19,20 +19,23 @@
                 <label for="bpm-input">BPM</label>
                 <input type="number" id="bpm-input" value="120" min="60" max="240">
             </div>
+            <!-- Timeline Zoom Controls -->
+            <div class="zoom-group">
+                <span>Timeline Zoom:</span>
+                <input type="range" id="timeline-zoom-x" min="50" max="300" value="100" title="Horizontal Zoom">
+            </div>
         </header>
 
         <!-- Main Workspace -->
         <main class="workspace">
-            <!-- Left Sidebar -->
             <aside class="sidebar">
                 <h3>Add Track</h3>
                 <button id="add-inst-btn" class="add-btn">+ Instrument Track</button>
                 <button id="add-audio-btn" class="add-btn">+ Audio Track</button>
             </aside>
 
-            <!-- Right Workspace Split: Timeline & Piano Roll -->
             <section class="editor-area">
-                <!-- Arrangement Timeline (Top View) -->
+                <!-- Arrangement Timeline -->
                 <div class="timeline-container">
                     <div class="timeline-ruler">
                         <div class="ruler-spacer">Arrangement View</div>
@@ -46,16 +49,19 @@
                     <div id="tracks-list"></div>
                 </div>
 
-                <!-- MIDI Editor Piano Roll (Bottom View - Shows when instrument track is added) -->
+                <!-- MIDI Editor Piano Roll -->
                 <div id="midi-editor" class="midi-editor hidden">
                     <div class="midi-header">
                         <h4>🎹 MIDI Piano Roll Editor: <span id="current-editing-track">None</span></h4>
+                        <!-- MIDI Roll Specific Zoom Sliders -->
+                        <div class="midi-zoom-controls">
+                            <label>Width <input type="range" id="midi-zoom-x" min="50" max="400" value="100"></label>
+                            <label>Height <input type="range" id="midi-zoom-y" min="15" max="60" value="24"></label>
+                        </div>
                         <button id="close-midi-btn">✕ Close Editor</button>
                     </div>
                     <div class="piano-roll-container">
-                        <!-- Keys column on left -->
                         <div id="piano-keys" class="piano-keys"></div>
-                        <!-- Note grid sheets on right -->
                         <div id="piano-grid" class="piano-grid"></div>
                     </div>
                 </div>
