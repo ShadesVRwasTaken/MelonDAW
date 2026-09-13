@@ -1,26 +1,24 @@
-// ==========================================
-// PART 1: AUDIO CORE & STATE ARCHITECTURE
-// ==========================================
+// ==========================================================================
+// PART 1: AUDIO CONFIGURATION & INFINITE TRANSPORT TIMING
+// ==========================================================================
 
 let audioCtx = null;
 let trackCount = 0;
 let isPlaying = false;
-let currentBeat = 0;
+let currentSeconds = 0; 
 let bpm = 120;
 let playbackInterval = null;
 let activeTrackId = null;
 
-// Track Global Registry Data Stores
-const trackNotes = {}; 
+// Adaptive Snapping Value Context Sizing Trackers
+let currentSnapValue = 0.25; // 0.25 = quarter note (Default 1 beat unit snapping interval)
 
+const trackNotes = {}; 
 const NOTE_NAMES = ['B', 'A#', 'A', 'G#', 'G', 'F#', 'F', 'E', 'D#', 'D', 'C#', 'C'];
 const ALL_NOTES = [];
 
-// Build Pitch Scale Frequency Reference Table (C0 to C8)
 for (let octave = 8; octave >= 0; octave--) {
-    NOTE_NAMES.forEach(note => {
-        ALL_NOTES.push(`${note}${octave}`);
-    });
+    NOTE_NAMES.forEach(note => { ALL_NOTES.push(`${note}${octave}`); });
 }
 
 function getFrequency(noteName) {
@@ -40,52 +38,60 @@ function playTone(freq, duration) {
     if (!audioCtx) return;
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
-    
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    
-    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-    
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
-    
     osc.start();
     osc.stop(audioCtx.currentTime + duration);
 }
 
-// ==========================================
-// PART 2: TRANSPORT LOOP & TRACK UI BUILDERS
-// ==========================================
-
+// Infinite Continuous Time tracking loop driver engine
 function startTimelineLoop() {
-    const secondsPerBeat = 60 / bpm;
+    const timeResolutionMs = 25; // Processes layout positions accurately every 25 milliseconds
+    const startTime = Date.now() - (currentSeconds * 1000);
 
     playbackInterval = setInterval(() => {
-        document.querySelectorAll('.timeline-block').forEach(b => {
-            if (parseInt(b.dataset.bar) === currentBeat) {
-                b.classList.add('playhead-current');
-            } else {
-                b.classList.remove('playhead-current');
-            }
-        });
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        currentSeconds = elapsedSec;
+        
+        const secondsPerBeat = 60 / bpm;
+        const currentBeatPosition = elapsedSec / secondsPerBeat;
 
+        // Visual layout playhead tracking synchronization updating
+        const timelineZoomX = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--timeline-block-width')) || 100;
+        const playheadPx = currentBeatPosition * timelineZoomX;
+        
+        const playheadLine = document.getElementById('playhead-line');
+        if (playheadLine) {
+            playheadLine.style.display = 'block';
+            playheadLine.style.left = `${playheadPx}px`;
+        }
+
+        // Loop checks audio note trigger ranges
         Object.keys(trackNotes).forEach(trackId => {
-            const notes = trackNotes[trackId];
-            notes.forEach(noteObj => {
-                if (Math.floor(noteObj.beatStart) === currentBeat) {
-                    const frequency = getFrequency(noteObj.note);
-                    const noteDurationSeconds = noteObj.duration * secondsPerBeat;
-                    playTone(frequency, noteDurationSeconds);
+            trackNotes[trackId].forEach(noteObj => {
+                const triggerThreshold = timeResolutionMs / 1000 / secondsPerBeat;
+                if (currentBeatPosition >= noteObj.beatStart && currentBeatPosition < noteObj.beatStart + triggerThreshold) {
+                    if (!noteObj.hasTriggeredThisPass) {
+                        noteObj.hasTriggeredThisPass = true;
+                        const freq = getFrequency(noteObj.note);
+                        playTone(freq, noteObj.duration * secondsPerBeat);
+                    }
+                } else {
+                    noteObj.hasTriggeredThisPass = false;
                 }
             });
         });
-
-        currentBeat = (currentBeat + 1) % 4;
-    }, secondsPerBeat * 1000);
+    }, timeResolutionMs);
 }
 
-// Master Toolbar Interface Drivers
+// ==========================================================================
+// PART 2: TOOLBAR CONTROLS & DYNAMIC VIEWPORT GENERATION
+// ==========================================================================
+
 document.getElementById('play-btn').addEventListener('click', () => {
     initAudio();
     if (!isPlaying) {
@@ -104,21 +110,34 @@ document.getElementById('play-btn').addEventListener('click', () => {
 document.getElementById('stop-btn').addEventListener('click', () => {
     clearInterval(playbackInterval);
     isPlaying = false;
-    currentBeat = 0;
+    currentSeconds = 0;
     document.getElementById('play-btn').innerText = "▶ Play";
     document.getElementById('play-btn').classList.remove('active');
-    document.querySelectorAll('.timeline-block').forEach(b => b.classList.remove('playhead-current'));
+    
+    const playheadLine = document.getElementById('playhead-line');
+    if (playheadLine) playheadLine.style.display = 'none';
+    
+    Object.keys(trackNotes).forEach(t => trackNotes[t].forEach(n => n.hasTriggeredThisPass = false));
 });
 
 document.getElementById('bpm-input').addEventListener('input', (e) => {
     bpm = parseInt(e.target.value) || 120;
-    if (isPlaying) {
-        clearInterval(playbackInterval);
-        startTimelineLoop();
-    }
 });
 
-// Appending Track Framework Rows
+// Render infinite layout helper ticks into top ruler track panels
+function generateInfiniteTimelineRuler() {
+    const ticksContainer = document.getElementById('ruler-ticks');
+    ticksContainer.innerHTML = '<div id="playhead-line"></div>'; // Re-insert playhead lane shell
+    
+    // Procedurally prints initial timeline markers up to 100 beats down the track
+    for (let i = 1; i <= 100; i++) {
+        const tick = document.createElement('div');
+        tick.className = 'tick';
+        tick.innerText = `Beat ${i}`;
+        ticksContainer.appendChild(tick);
+    }
+}
+
 document.getElementById('add-inst-btn').addEventListener('click', () => {
     trackCount++;
     const trackId = `track-${trackCount}`;
@@ -149,18 +168,37 @@ function createTimelineRow(trackId, trackName, type) {
             </div>
         </div>
         <div class="track-timeline">
-            <div class="timeline-block" data-bar="0"></div>
-            <div class="timeline-block" data-bar="1"></div>
-            <div class="timeline-block" data-bar="2"></div>
-            <div class="timeline-block" data-bar="3"></div>
+             <div class="timeline-block" id="overview-${trackId}"></div>
         </div>
     `;
     listContainer.appendChild(row);
 }
 
-// ==========================================
-// PART 3: PIANO ROLL ENGINE & DRAG LOGIC (FIXED)
-// ==========================================
+// ==========================================================================
+// PART 3: PIANO ROLL CANVAS & ADAPTIVE SNAPPING GRID CALCULATIONS
+// ==========================================================================
+
+function calculateAdaptiveSnapping(zoomWidth) {
+    const indicator = document.getElementById('snap-value');
+    
+    if (zoomWidth < 150) {
+        currentSnapValue = 1.0; // Snaps strictly to full beats
+        document.documentElement.style.setProperty('--midi-subdivisions', '1');
+        if (indicator) indicator.innerText = "1/4 Note (1 Beat)";
+    } else if (zoomWidth >= 150 && zoomWidth < 350) {
+        currentSnapValue = 0.5; // 8th note steps
+        document.documentElement.style.setProperty('--midi-subdivisions', '2');
+        if (indicator) indicator.innerText = "1/8 Note";
+    } else if (zoomWidth >= 350 && zoomWidth < 700) {
+        currentSnapValue = 0.25; // 16th note structures
+        document.documentElement.style.setProperty('--midi-subdivisions', '4');
+        if (indicator) indicator.innerText = "1/16 Note";
+    } else {
+        currentSnapValue = 0.125; // High definition 32nd note adjustments
+        document.documentElement.style.setProperty('--midi-subdivisions', '8');
+        if (indicator) indicator.innerText = "1/32 Note";
+    }
+}
 
 function openPianoRoll(trackId, trackName) {
     activeTrackId = trackId;
@@ -171,6 +209,10 @@ function openPianoRoll(trackId, trackName) {
     const gridContainer = document.getElementById('piano-grid');
     keysContainer.innerHTML = '';
     gridContainer.innerHTML = '';
+
+    // Initialize adaptive layout scale calculations immediately
+    const baseWidthSlider = document.getElementById('midi-zoom-x').value;
+    calculateAdaptiveSnapping(parseFloat(baseWidthSlider));
 
     ALL_NOTES.forEach(noteName => {
         const key = document.createElement('div');
@@ -183,14 +225,18 @@ function openPianoRoll(trackId, trackName) {
         const rowGrid = document.createElement('div');
         rowGrid.className = 'grid-row';
         rowGrid.dataset.note = noteName;
-
-        for (let b = 0; b < 4; b++) {
-            const cell = document.createElement('div');
-            cell.className = 'grid-cell';
-            cell.dataset.beat = b;
-            cell.addEventListener('dblclick', (e) => { e.stopPropagation(); createNewNote(trackId, noteName, b); });
-            rowGrid.appendChild(cell);
-        }
+        
+        // Single canvas click tracking catches note drawing anywhere down the lane lines
+        rowGrid.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            const clickX = e.offsetX;
+            const cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
+            const clickedBeatPosition = clickX / cellWidth;
+            
+            // Mathematical snap targeting calculation
+            const snappedBeat = Math.round(clickedBeatPosition / currentSnapValue) * currentSnapValue;
+            createNewNote(trackId, noteName, snappedBeat);
+        });
         gridContainer.appendChild(rowGrid);
     });
 
@@ -203,7 +249,7 @@ function openPianoRoll(trackId, trackName) {
 
 function createNewNote(trackId, noteName, beatStart) {
     const noteId = `note-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const newNoteObj = { id: noteId, note: noteName, beatStart: beatStart, duration: 1 };
+    const newNoteObj = { id: noteId, note: noteName, beatStart: beatStart, duration: currentSnapValue, hasTriggeredThisPass: false };
     trackNotes[trackId].push(newNoteObj);
     renderNoteElement(newNoteObj);
     playTone(getFrequency(noteName), 0.2);
@@ -212,9 +258,6 @@ function createNewNote(trackId, noteName, beatStart) {
 
 function renderNoteElement(noteObj) {
     const gridContainer = document.getElementById('piano-grid');
-    const targetRow = document.querySelector(`.grid-row[data-note="${noteObj.note}"]`);
-    if (!targetRow) return;
-
     const noteEl = document.createElement('div');
     noteEl.className = 'piano-note';
     noteEl.id = noteObj.id;
@@ -225,9 +268,8 @@ function renderNoteElement(noteObj) {
     setupNoteInteractions(noteEl, noteObj);
 }
 
-// FIX: Added hardcoded numerical fallbacks to prevent invisible NaNpx sizing
 function updateNoteStylePosition(noteEl, noteObj) {
-    let cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 100;
+    let cellWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
     let cellHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height')) || 24;
     const noteIndex = ALL_NOTES.indexOf(noteObj.note);
 
@@ -241,14 +283,13 @@ function setupNoteInteractions(noteEl, noteObj) {
     let isDragging = false, isResizing = false;
     let startX, startY, startLeft, startTop, startWidth;
 
-    const cellWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 100;
+    const cellWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-width')) || 200;
     const cellHeight = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--midi-cell-height')) || 24;
 
     noteEl.addEventListener('pointerdown', (e) => {
         initAudio(); e.stopPropagation(); noteEl.setPointerCapture(e.pointerId);
         startX = e.clientX; startY = e.clientY;
         startLeft = parseFloat(noteEl.style.left); startTop = parseFloat(noteEl.style.top); startWidth = parseFloat(noteEl.style.width);
-
         if (e.target.classList.contains('resize-handle')) { isResizing = true; } 
         else { isDragging = true; noteEl.classList.add('dragging'); }
     });
@@ -258,13 +299,12 @@ function setupNoteInteractions(noteEl, noteObj) {
         const deltaX = e.clientX - startX; const deltaY = e.clientY - startY;
 
         if (isDragging) {
-            let newLeft = startLeft + deltaX; let newTop = startTop + deltaY;
-            newLeft = Math.max(0, newLeft); newTop = Math.max(0, Math.min(newTop, (ALL_NOTES.length - 1) * cellHeight()));
+            let newLeft = Math.max(0, startLeft + deltaX);
+            let newTop = Math.max(0, Math.min(startTop + deltaY, (ALL_NOTES.length - 1) * cellHeight()));
             noteEl.style.left = `${newLeft}px`; noteEl.style.top = `${newTop}px`;
         }
         if (isResizing) {
-            let newWidth = startWidth + deltaX;
-            noteEl.style.width = `${Math.max(cellWidth() * 0.25, newWidth)}px`;
+            noteEl.style.width = `${Math.max(cellWidth() * currentSnapValue, startWidth + deltaX)}px`;
         }
     });
 
@@ -274,15 +314,16 @@ function setupNoteInteractions(noteEl, noteObj) {
 
         if (isDragging) {
             isDragging = false; noteEl.classList.remove('dragging');
-            const snappedBeat = Math.round(parseFloat(noteEl.style.left) / cellWidth());
+            const snappedBeat = Math.round((parseFloat(noteEl.style.left) / cellWidth()) / currentSnapValue) * currentSnapValue;
             const snappedNoteIndex = Math.round(parseFloat(noteEl.style.top) / cellHeight());
-            noteObj.beatStart = Math.min(3, Math.max(0, snappedBeat));
+            noteObj.beatStart = snappedBeat;
             noteObj.note = ALL_NOTES[snappedNoteIndex];
             playTone(getFrequency(noteObj.note), 0.2);
         }
         if (isResizing) {
             isResizing = false;
-            noteObj.duration = Math.max(0.25, Math.round((parseFloat(noteEl.style.width) / cellWidth()) * 4) / 4);
+            const rawDuration = parseFloat(noteEl.style.width) / cellWidth();
+            noteObj.duration = Math.max(currentSnapValue, Math.round(rawDuration / currentSnapValue) * currentSnapValue);
         }
         updateNoteStylePosition(noteEl, noteObj);
         updateTimelineOverview(activeTrackId);
@@ -296,23 +337,24 @@ function setupNoteInteractions(noteEl, noteObj) {
 }
 
 function updateTimelineOverview(trackId) {
-    for (let b = 0; b < 4; b++) {
-        const overviewBlock = document.querySelector(`#row-${trackId} .timeline-block[data-bar="${b}"]`);
-        if (overviewBlock) {
-            const hasNotesOnBeat = trackNotes[trackId].some(n => Math.floor(n.beatStart) === b);
-            overviewBlock.classList.toggle('has-notes', hasNotesOnBeat);
-        }
+    const overview = document.getElementById(`overview-${trackId}`);
+    if (overview) {
+        overview.classList.toggle('has-notes', trackNotes[trackId].length > 0);
     }
 }
 
-// Global Custom Zoom Layout Event Callbacks
+// Sliders Zoom Event Triggers
 document.getElementById('timeline-zoom-x').addEventListener('input', (e) => {
     document.documentElement.style.setProperty('--timeline-block-width', `${e.target.value}px`);
 });
+
 document.getElementById('midi-zoom-x').addEventListener('input', (e) => {
-    document.documentElement.style.setProperty('--midi-cell-width', `${e.target.value}px`);
+    const val = parseFloat(e.target.value);
+    document.documentElement.style.setProperty('--midi-cell-width', `${val}px`);
+    calculateAdaptiveSnapping(val);
     if (activeTrackId) refreshAllNoteElementsPositions();
 });
+
 document.getElementById('midi-zoom-y').addEventListener('input', (e) => {
     document.documentElement.style.setProperty('--midi-cell-height', `${e.target.value}px`);
     if (activeTrackId) refreshAllNoteElementsPositions();
@@ -335,7 +377,8 @@ function deleteTrack(trackId) {
     if (activeTrackId === trackId) document.getElementById('midi-editor').classList.add('hidden');
 }
 
-// Structural Initialization Default System Parameters
+// Startup Framework Triggers
+generateInfiniteTimelineRuler();
 document.documentElement.style.setProperty('--timeline-block-width', '100px');
-document.documentElement.style.setProperty('--midi-cell-width', '100px');
+document.documentElement.style.setProperty('--midi-cell-width', '200px');
 document.documentElement.style.setProperty('--midi-cell-height', '24px');
