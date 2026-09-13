@@ -39,7 +39,7 @@ button.active { background: #ff9800; color: #000; font-weight: bold; }
 .ruler-ticks { display: flex; position: relative; }
 .tick { width: var(--timeline-block-width); min-width: var(--timeline-block-width); max-width: var(--timeline-block-width); font-size: 0.75rem; color: #666; text-align: left; padding-left: 5px; border-right: 1px solid #222;}
 
-.tracks-list { width: max-content; min-width: 100%; position: relative; }
+.tracks-list { width: max-content; min-width: 100%; position: relative; display: block; }
 .track-row { display: flex; height: 60px; border-bottom: 1px solid #222; width: max-content; min-width: 100%; }
 
 .track-header { 

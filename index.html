@@ -8,7 +8,7 @@
 </head>
 <body>
     <div id="daw-app">
-        <!-- Top Toolbar -->
+        <!-- Top Control Bar -->
         <header class="toolbar">
             <div class="logo">🍈 MelonDAW</div>
             <div class="transport-controls">
@@ -25,7 +25,7 @@
             </div>
         </header>
 
-        <!-- Main Workspace -->
+        <!-- Main Workspace Panels Split -->
         <main class="workspace">
             <aside class="sidebar">
                 <h3>Add Track</h3>
@@ -34,16 +34,16 @@
             </aside>
 
             <section class="editor-area">
-                <!-- Arrangement Timeline -->
+                <!-- Top Arrangement Timeline Container -->
                 <div class="timeline-container">
                     <div class="timeline-ruler">
                         <div class="ruler-spacer">Arrangement View</div>
                         <div id="ruler-ticks" class="ruler-ticks"></div>
                     </div>
-                    <div id="tracks-list"></div>
+                    <div id="tracks-list" class="tracks-list"></div>
                 </div>
 
-                <!-- MIDI Editor Piano Roll -->
+                <!-- Bottom MIDI Piano Roll View Component -->
                 <div id="midi-editor" class="midi-editor hidden">
                     <div class="midi-header">
                         <h4>🎹 MIDI Piano Roll Editor: <span id="current-editing-track">None</span></h4>
